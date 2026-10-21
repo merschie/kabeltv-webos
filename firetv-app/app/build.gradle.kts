@@ -47,6 +47,11 @@ android {
     // Senderlogos aus der webOS-App mitbenutzen statt sie doppelt im Repo zu halten
     sourceSets["main"].assets.srcDir("build/generated/logos")
 
+    lint {
+        // Zurück kommt auf dem Fire TV als Taste der Fernbedienung, nicht als Wischgeste
+        disable += "GestureBackNavigation"
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
