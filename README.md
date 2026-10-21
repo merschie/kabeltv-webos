@@ -15,6 +15,8 @@ Der Videoplayer von webOS spielt kein RTSP. Deshalb bringt die App einen kleinen
 
 Der Programmführer (EPG) kommt zurzeit noch vom Proxy.
 
+Auf diesem Branch entsteht zusätzlich eine App für den Fire TV Stick, siehe [`firetv-app/`](firetv-app/README.md). Die webOS-App wird auf dem Branch `webos` weiterentwickelt.
+
 ## Bedienung
 
 | Taste | im TV-Bild | in der Senderliste |
