@@ -1,19 +1,14 @@
-﻿# Baut die App, bringt den Proxy auf den Unraid-Server und installiert die App auf dem Fernseher.
+﻿# Baut die App und installiert sie auf den Fernsehern.
 #
-#   .\scripts\deploy.ps1            # alles
-#   .\scripts\deploy.ps1 -NoTv      # nur Proxy auf dem Server
+#   .\scripts\deploy.ps1                       # Gerät "tv"
+#   .\scripts\deploy.ps1 -TvDevice tv, tv2     # mehrere Fernseher
+#   .\scripts\deploy.ps1 -NoTv                 # nur bauen
 #
-# Voraussetzungen: Node.js, SSH-Schlüssel für den Server, im webOS-CLI eingerichtetes Gerät (ares-setup-device).
+# Voraussetzungen: Node.js, im webOS-CLI eingerichtete Geräte (ares-setup-device).
 
 param(
     [switch]$NoTv,
-    [string]$Server = '192.168.177.80',
-    [string]$SshKey = "$env:USERPROFILE\.ssh\id_ed25519_unraid",
-    [string]$Share = '\\192.168.177.80\appdata\kabeltv',
-    [string]$RemoteDir = '/mnt/user/appdata/kabeltv',
-    [string]$FritzHost = '192.168.177.1',
-    [int]$Port = 8095,
-    [string]$TvDevice = 'tv'
+    [string[]]$TvDevice = @('tv')
 )
 
 $ErrorActionPreference = 'Stop'
@@ -42,31 +37,12 @@ New-Item -ItemType Directory -Force dist | Out-Null
 Copy-Item proxy\epg.js service\epg.js -Force   # RTSP-Client teilen sich Proxy und Dienst
 Ares ares-package webos-app service -o dist
 
-Write-Host "== Dateien nach $Share kopieren"
-robocopy proxy "$Share\proxy" server.js epg.js package.json Dockerfile /NJH /NJS /NFL /NDL | Out-Null
-if ($LASTEXITCODE -ge 8) { throw 'Kopieren von proxy fehlgeschlagen' }
-robocopy webos-app "$Share\webos-app" /MIR /NJH /NJS /NFL /NDL | Out-Null
-if ($LASTEXITCODE -ge 8) { throw 'Kopieren von webos-app fehlgeschlagen' }
-Copy-Item docker-compose.yml, README.md $Share -Force
-
-Write-Host '== Container neu bauen und starten'
-$remote = @(
-    "cd $RemoteDir",
-    'docker build -q -f proxy/Dockerfile -t kabeltv-proxy . >/dev/null',
-    'docker rm -f kabeltv-proxy >/dev/null 2>&1 || true',
-    "docker run -d --name kabeltv-proxy --restart unless-stopped --network host -e FRITZ_HOST=$FritzHost -e PORT=$Port --tmpfs /tmp/kabeltv kabeltv-proxy >/dev/null",
-    'sleep 2',
-    "curl -sf localhost:$Port/api/status >/dev/null && echo 'Proxy läuft auf Port $Port' || { docker logs kabeltv-proxy; exit 1; }"
-) -join ' && '
-ssh -o BatchMode=yes -i $SshKey "root@$Server" $remote
-if ($LASTEXITCODE -ne 0) { throw 'Deploy auf dem Server fehlgeschlagen' }
-
-if ($NoTv) { return }
-
-Write-Host '== App auf dem Fernseher installieren'
-try {
-    Ares ares-install --device $TvDevice $ipk
-    Ares ares-launch --device $TvDevice $appinfo.id
-} catch {
-    Write-Warning "Fernseher nicht erreichbar (Developer Mode abgelaufen oder TV aus?): $_"
+foreach ($tv in $TvDevice) {
+    Write-Host "== App auf Fernseher '$tv' installieren"
+    try {
+        Ares ares-install --device $tv $ipk
+        Ares ares-launch --device $tv $appinfo.id
+    } catch {
+        Write-Warning "Fernseher '$tv' nicht erreichbar (Developer Mode abgelaufen oder TV aus?): $_"
+    }
 }

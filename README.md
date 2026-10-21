@@ -3,17 +3,10 @@
 Diese webOS-App zeigt die DVB-C-Sender der FRITZ!Box (Listen HD, SD und Radio) auf dem LG C3.
 
 ```
-FRITZ!Box (RTSP) ──▶ Stream-Dienst im TV (HTTP, MPEG-TS) ──▶ Videoplayer   Modus "Direkt"
-FRITZ!Box (RTSP) ──▶ Unraid-Proxy (HLS) ─────────────────▶ LG C3         Modus "Proxy"
+FRITZ!Box (RTSP) ──▶ Stream-Dienst im TV (HTTP, MPEG-TS) ──▶ Videoplayer
 ```
 
-Der Videoplayer von webOS spielt kein RTSP. Deshalb bringt die App einen kleinen Hintergrunddienst mit (`service/`, Node.js auf dem Fernseher). Er holt den Sender per RTSP/RTP von der FRITZ!Box und reicht das MPEG-TS unverändert über `http://127.0.0.1:8096` an den Player weiter. Ein zusätzliches Gerät ist dafür nicht nötig.
-
-- **Automatisch** (Standard): erst direkt über den Stream-Dienst, bei Problemen über den Proxy.
-- **Nur direkt**: nur über den Stream-Dienst im Fernseher. Ist der Dienst nicht verfügbar, wird die RTSP-Adresse direkt versucht.
-- **Nur Proxy**: Der Docker-Container wandelt die Streams in HLS um. Das Bild bleibt unverändert, nur der Ton wird nach AAC gewandelt.
-
-Den Programmführer (EPG) liest im Modus **Nur direkt** der Stream-Dienst im Fernseher selbst aus dem Kabelsignal, im Modus **Nur Proxy** kommt er vom Proxy. Im Modus **Automatisch** fragt die App zuerst den Proxy und nur, wenn der nicht antwortet, den Fernseher (siehe [EPG ohne Proxy](#epg-ohne-proxy)).
+Der Videoplayer von webOS spielt kein RTSP. Deshalb bringt die App einen kleinen Hintergrunddienst mit (`service/`, Node.js auf dem Fernseher). Er holt den Sender per RTSP/RTP von der FRITZ!Box und reicht das MPEG-TS unverändert über `http://127.0.0.1:8096` an den Player weiter. Ein zusätzliches Gerät ist dafür nicht nötig. Den Programmführer (EPG) liest derselbe Dienst aus dem Kabelsignal (siehe [Programmführer](#programmführer-epg)).
 
 ## Bedienung
 
@@ -29,43 +22,9 @@ Den Programmführer (EPG) liest im Modus **Nur direkt** der Stream-Dienst im Fer
 
 Mit dem Magic-Remote-Zeiger lässt sich ebenfalls alles anklicken.
 
-## 1. Proxy auf Unraid (optional, für EPG und als Reserve)
+## Programmführer (EPG)
 
-Den Projektordner (mit `proxy/`, `webos-app/` und `docker-compose.yml`) zum Beispiel nach `/mnt/user/appdata/kabeltv` kopieren. Dann im Unraid-Terminal:
-
-```bash
-cd /mnt/user/appdata/kabeltv
-docker build -f proxy/Dockerfile -t kabeltv-proxy .
-docker run -d --name kabeltv-proxy --restart unless-stopped --network host \
-  -e FRITZ_HOST=192.168.177.1 --tmpfs /tmp/kabeltv kabeltv-proxy
-```
-
-Ist das Compose-Manager-Plugin installiert, reicht stattdessen `docker compose up -d --build`.
-
-Test: `http://192.168.177.80:8095/api/status` im Browser öffnen, dort muss `"ffmpeg": true` stehen. Unter `http://192.168.177.80:8095/` läuft die App zusätzlich im Browser, aber nur im Proxy-Modus.
-
-Einstellungen über Umgebungsvariablen:
-
-| Variable | Standard | Bedeutung |
-|---|---|---|
-| `FRITZ_HOST` | `192.168.177.1` | Adresse der FRITZ!Box |
-| `PORT` | `8095` | Port des Proxys |
-| `AUDIO` | `aac` | `copy` reicht den Originalton (MP2/AC3) unverändert durch |
-| `VIDEO` | `copy` | `h264` kodiert neu, falls SD-Sender (MPEG-2) nicht laufen. Das kostet Rechenleistung |
-| `RTSP_TRANSPORT` | (leer) | `tcp`, falls UDP-Pakete nicht ankommen |
-| `MAX_STREAMS` | `2` | Gleichzeitige Streams. Die FRITZ!Box hat nur wenige Tuner |
-| `IDLE_SECONDS` | `20` | Nach dieser Zeit ohne Abruf wird ein Stream beendet |
-| `EPG` | (an) | `off` schaltet den Programmführer ab |
-| `EPG_DWELL` | `15` | Sekunden pro Frequenz beim EPG-Scan |
-| `EPG_INTERVAL_HOURS` | `6` | Abstand zwischen zwei EPG-Scans |
-
-### Programmführer (EPG)
-
-Der Proxy liest das Programm direkt aus dem Kabelsignal (DVB-EIT), etwa eine Woche im Voraus. Dafür tunt er beim Start und danach alle 6 Stunden jede Frequenz für 15 Sekunden an, aber nur die Info-Datenströme, ohne Bild. Ein Durchlauf dauert rund 5 Minuten und belegt so lange einen Tuner. Die App zeigt das Programm in der Senderliste und in der Infoleiste.
-
-### EPG ohne Proxy
-
-Ohne Proxy liest der Stream-Dienst im Fernseher den EPG auf dieselbe Weise ein:
+Der Stream-Dienst im Fernseher liest das Programm direkt aus dem Kabelsignal (DVB-EIT):
 
 - **Beim Zuschauen**: Die FRITZ!Box schickt die Info-Datenströme (PID 0, 17, 18) im Stream mit. Der Dienst liest sie nebenbei mit, das kostet keinen Tuner. So gibt es für alle Sender auf der Frequenz des laufenden Senders sofort Jetzt/Danach.
 - **Scan im Hintergrund**: Fragt die App das erste Mal nach Programminfos, tunt der Dienst nach 15 Sekunden nacheinander jede Frequenz für 12 Sekunden an (nur Info-Daten, ohne Bild), danach alle 6 Stunden. Frequenzen, die er gerade beim Zuschauen gelesen hat, lässt er aus. Ein Durchlauf belegt einige Minuten lang einen zweiten Tuner.
@@ -74,9 +33,7 @@ Ohne Proxy liest der Stream-Dienst im Fernseher den EPG auf dieselbe Weise ein:
 
 Der Dienst ist standardmäßig nur im Fernseher selbst erreichbar (`127.0.0.1`). Für die Fehlersuche lässt sich in den Einstellungen „Statusseite im Heimnetz“ einschalten, dann zeigt `http://<TV-IP>:8096/status` den Zustand (Abschnitt `epg` und Protokoll).
 
-`--network host` ist wichtig, weil die FRITZ!Box das Bild per RTP/UDP an den Container schickt.
-
-## 2. App auf den Fernseher
+## App auf den Fernseher
 
 1. Auf dem C3 aus dem LG Content Store die App **Developer Mode** installieren und mit einem kostenlosen Konto von [webostv.developer.lge.com](https://webostv.developer.lge.com) anmelden.
 2. *Dev Mode Status* einschalten. Der Fernseher startet neu. Die Session läuft 50 Stunden und lässt sich in der App verlängern.
@@ -104,7 +61,7 @@ ares-install --device tv dist/de.local.kabeltv_1.0.0_all.ipk
 
 Alternativ geht die Installation per Klick mit dem *webOS Dev Manager* (GitHub: webosbrew/dev-manager-desktop). Dort lässt sich die Dev-Mode-Session auch automatisch verlängern.
 
-App mit Stream-Dienst neu bauen (der Dienst nutzt RTSP-Client und EPG-Leser aus `proxy/epg.js`):
+App mit Stream-Dienst neu bauen (der Dienst nutzt RTSP-Client und EPG-Leser aus `proxy/epg.js`, Rest des früheren Unraid-Proxys):
 
 ```bash
 cp proxy/epg.js service/epg.js && ares-package webos-app service -o dist
@@ -112,7 +69,7 @@ cp proxy/epg.js service/epg.js && ares-package webos-app service -o dist
 
 ## Deploy in einem Schritt
 
-`scripts/deploy.ps1` baut die `.ipk`, kopiert alles auf den Unraid-Server, baut dort den Container neu und installiert die App auf dem Fernseher. Mit `-NoTv` aktualisiert es nur den Server. Adressen und Pfade lassen sich als Parameter ändern (siehe Kopf des Skripts).
+`scripts/deploy.ps1` baut die `.ipk` und installiert die App auf den Fernsehern (`-TvDevice tv, tv2`). Mit `-NoTv` baut es nur.
 
 ```powershell
 .\scripts\deploy.ps1

@@ -15,14 +15,13 @@
   ];
 
   var DIRECT_TIMEOUT = 10000;
-  var PROXY_TIMEOUT = 25000;
 
   var $ = function (id) { return document.getElementById(id); };
   var video = $('video');
 
   // ---------- Einstellungen ----------
 
-  var DEFAULTS = { fritzHost: 'fritz.box', proxyUrl: 'http://192.168.177.80:8095', mode: 'auto', lanStatus: false };
+  var DEFAULTS = { fritzHost: 'fritz.box', lanStatus: false };
 
   function load(key, fallback) {
     try {
@@ -35,18 +34,8 @@
     try { localStorage.setItem('kabeltv.' + key, JSON.stringify(value)); } catch (e) { /* ignorieren */ }
   }
 
-  var settings = Object.assign({}, DEFAULTS, load('settings', {}));
-  // Proxy ist von Port 8080 auf 8095 umgezogen
-  if (settings.proxyUrl === 'http://192.168.177.80:8080') {
-    settings.proxyUrl = DEFAULTS.proxyUrl;
-    save('settings', settings);
-  }
-
-  function proxyBase() {
-    var p = (settings.proxyUrl || '').trim().replace(/\/+$/, '');
-    if (p && !/^https?:\/\//.test(p)) p = 'http://' + p;
-    return p;
-  }
+  var stored = load('settings', {});
+  var settings = { fritzHost: stored.fritzHost || DEFAULTS.fritzHost, lanStatus: !!stored.lanStatus };
 
   // ---------- Zustand ----------
 
@@ -54,14 +43,9 @@
     listId: load('listId', 'tvhd'),
     channels: {},          // listId -> [{name, url}]
     index: 0,
-    via: null,             // 'direct' | 'proxy'
-    proxyStream: null,     // aktuell genutzte Proxy-URL zum Freigeben
-    directFailed: load('directFailed.v3', false), // im Auto-Modus: Direktwiedergabe hat schon einmal versagt
     playToken: 0,
     epg: {},               // listId -> { channels: {url: [jetzt, danach]}, fetched }
     epgDetail: {},         // url -> { events, fetched }
-    epgSource: null,       // 'proxy' | 'service': woher der EPG zuletzt kam
-    epgProxyFailed: false, // im Auto-Modus: Proxy liefert keinen EPG, Dienst im TV fragen
     view: 'tv',            // 'tv' | 'channels' | 'settings'
     overlayListId: null,
     overlayIndex: 0
@@ -98,10 +82,6 @@
 
   function b64url(s) {
     return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  }
-
-  function proxyStreamUrl(rtspUrl) {
-    return proxyBase() + '/hls/' + b64url(rtspUrl) + '/index.m3u8';
   }
 
   // ---------- Stream-Dienst auf dem Fernseher ----------
@@ -175,7 +155,7 @@
   }
 
   // ---------- Programmführer ----------
-  // Kommt vom Proxy oder vom Stream-Dienst im Fernseher, der ihn selbst aus dem Kabelsignal liest.
+  // Kommt vom Stream-Dienst im Fernseher, der ihn selbst aus dem Kabelsignal liest.
 
   var EPG_MAX_AGE = 120000;
 
@@ -183,44 +163,17 @@
     return tvService.port ? 'http://127.0.0.1:' + tvService.port : '';
   }
 
-  // Reihenfolge der EPG-Quellen: "Nur Proxy" fragt nur den Proxy, "Nur direkt" nur den Dienst,
-  // "Automatisch" erst den Proxy (dann braucht der Fernseher keinen eigenen Tuner dafür).
-  function epgSources() {
-    if (settings.mode === 'proxy') return proxyBase() ? ['proxy'] : [];
-    if (settings.mode === 'direct' || !proxyBase() || state.epgProxyFailed) return ['service'];
-    return ['proxy', 'service'];
-  }
-
-  function epgUrl(source, path) {
-    if (source === 'proxy') return proxyBase() + path;
-    var host = (settings.fritzHost || DEFAULTS.fritzHost).trim();
-    return serviceBase() + path + '?host=' + encodeURIComponent(host);
-  }
-
   function fetchEpg(path) {
-    var sources = epgSources();
-    var attempt = function (i) {
-      if (i >= sources.length) return Promise.reject(new Error('keine EPG-Quelle'));
-      var source = sources[i];
-      var ready = source === 'service' ? waitForTvService(3000) : Promise.resolve();
-      return ready.then(function () {
-        if (source === 'service' && !serviceBase()) throw new Error('Stream-Dienst läuft nicht');
-        return fetchText(epgUrl(source, path), 8000);
-      }).then(function (t) {
-        state.epgSource = source;
-        return JSON.parse(t);
-      }).catch(function (e) {
-        if (source === 'proxy' && i + 1 < sources.length) state.epgProxyFailed = true;
-        if (i + 1 < sources.length) return attempt(i + 1);
-        throw e;
-      });
-    };
-    return attempt(0);
+    return waitForTvService(3000).then(function () {
+      if (!serviceBase()) throw new Error('Stream-Dienst läuft nicht');
+      var host = (settings.fritzHost || DEFAULTS.fritzHost).trim();
+      return fetchText(serviceBase() + path + '?host=' + encodeURIComponent(host), 8000);
+    }).then(JSON.parse);
   }
 
   function loadEpg(listId) {
     var cached = state.epg[listId];
-    if (!epgSources().length || (cached && Date.now() - cached.fetched < EPG_MAX_AGE)) return;
+    if (cached && Date.now() - cached.fetched < EPG_MAX_AGE) return;
     fetchEpg('/api/epg/' + listId).then(function (r) {
       var channels = r.channels || {};
       // Solange der Fernseher noch einliest, bald wieder nachfragen
@@ -247,21 +200,7 @@
     if (state.channels[listId]) return Promise.resolve(state.channels[listId]);
 
     var host = (settings.fritzHost || DEFAULTS.fritzHost).trim();
-    var direct = function () {
-      return fetchText('http://' + host + '/dvb/m3u/' + listId + '.m3u').then(parseM3U);
-    };
-    var viaProxy = function () {
-      if (!proxyBase()) return Promise.reject(new Error('Kein Proxy eingetragen'));
-      return fetchText(proxyBase() + '/api/channels/' + listId)
-        .then(function (t) { return JSON.parse(t); });
-    };
-
-    var p;
-    if (settings.mode === 'proxy') p = viaProxy();
-    else if (settings.mode === 'direct' || !proxyBase()) p = direct();
-    else p = direct().catch(viaProxy);
-
-    return p.then(function (list) {
+    return fetchText('http://' + host + '/dvb/m3u/' + listId + '.m3u').then(parseM3U).then(function (list) {
       if (!list.length) throw new Error('Senderliste ist leer');
       state.channels[listId] = list;
       return list;
@@ -270,20 +209,11 @@
 
   // ---------- Wiedergabe ----------
 
-  function releaseProxy() {
-    if (state.proxyStream) {
-      var url = state.proxyStream.replace(/\/index\.m3u8$/, '/release');
-      state.proxyStream = null;
-      fetch(url, { method: 'POST' }).catch(function () {});
-    }
-  }
-
   function stopPlayback() {
     state.playToken++;
     video.pause();
     video.removeAttribute('src');
     video.load();
-    releaseProxy();
     hideStatus();
   }
 
@@ -317,14 +247,6 @@
     });
   }
 
-  function playbackOrder() {
-    var hasProxy = !!proxyBase();
-    if (settings.mode === 'direct') return ['direct'];
-    if (settings.mode === 'proxy') return hasProxy ? ['proxy'] : [];
-    if (!hasProxy) return ['direct'];
-    return state.directFailed ? ['proxy'] : ['direct', 'proxy'];
-  }
-
   function play(listId, index) {
     var list = state.channels[listId];
     if (!list || !list.length) return;
@@ -342,65 +264,27 @@
     setRadio(listId === 'radio' ? ch.name : null);
     loadEpg(listId);
     showInfo();
-    startLoader(ch.name, 'Sender wird vorbereitet', ch.name);
-
-    var order = playbackOrder();
-    if (!order.length) {
-      hideStatus();
-      showError('Kein Proxy eingetragen', 'Der Modus "Nur Proxy" braucht eine Proxy-Adresse.\nRote Taste: Einstellungen');
-      return;
-    }
-
-    var step = function (i) {
+    startLoader(ch.name, tvService.port ? 'Verbindung zur FRITZ!Box wird aufgebaut' : 'Stream-Dienst im Fernseher wird gestartet', ch.name);
+    waitForTvService(3000).then(function () {
+      if (token !== state.playToken) return false;
+      setLoaderBar(10, 'Verbindung zur FRITZ!Box wird aufgebaut');
+      return tryPlay(directStreamUrl(ch.url), DIRECT_TIMEOUT, token);
+    }).then(function (ok) {
       if (token !== state.playToken) return;
-      if (i >= order.length) {
-        hideStatus();
-        showError('Wiedergabe fehlgeschlagen', failureHint());
+      if (ok) {
+        // Ladeanzeige verschwindet von selbst, sobald das Bild wirklich läuft
+        showInfo();
         return;
       }
-      var via = order[i];
-      state.via = via;
-      if (via === 'proxy') {
-        startLoader(ch.name + ' (Proxy)', i > 0 ? 'Direkt ging nicht, versuche den Proxy' : 'Proxy startet den Sender', ch.name);
-      } else {
-        startLoader(ch.name, tvService.port ? 'Verbindung zur FRITZ!Box wird aufgebaut' : 'Stream-Dienst im Fernseher wird gestartet', ch.name);
-      }
-
-      var ready = via === 'direct' ? waitForTvService(3000) : Promise.resolve();
-      ready.then(function () {
-        if (token !== state.playToken) return false;
-        if (via === 'direct') setLoaderBar(10, 'Verbindung zur FRITZ!Box wird aufgebaut');
-        var url = via === 'direct' ? directStreamUrl(ch.url) : proxyStreamUrl(ch.url);
-        if (via === 'proxy') state.proxyStream = url;
-        return tryPlay(url, via === 'direct' ? DIRECT_TIMEOUT : PROXY_TIMEOUT, token);
-      }).then(function (ok) {
-        if (token !== state.playToken) return;
-        if (ok) {
-          // Ladeanzeige verschwindet von selbst, sobald das Bild wirklich läuft
-          showInfo();
-          return;
-        }
-        // Nur merken, wenn es ohne Stream-Dienst war; mit Dienst sind Fehler eher vorübergehend (Tuner belegt)
-        if (via === 'direct' && settings.mode === 'auto' && !tvService.port) {
-          state.directFailed = true;
-          save('directFailed.v3', true);
-        }
-        if (via === 'proxy') releaseProxy();
-        step(i + 1);
-      });
-    };
-    step(0);
+      hideStatus();
+      showError('Wiedergabe fehlgeschlagen', failureHint());
+    });
   }
 
   function failureHint() {
-    if (settings.mode === 'direct' || !proxyBase()) {
-      return 'Der Fernseher konnte den Stream nicht direkt abspielen' +
-        (tvService.port ? '' : ' (Stream-Dienst: ' + (tvService.error || 'nicht gestartet') + ')') + '.\n' +
-        'Möglich: alle Tuner der FRITZ!Box belegt.\n' +
-        'Ein Proxy (siehe Anleitung) löst das zuverlässig. Rote Taste: Einstellungen';
-    }
-    return 'Auch der Proxy konnte den Sender nicht liefern.\n' +
-      'Läuft der Proxy? Sind alle Tuner der FRITZ!Box belegt?\nRote Taste: Einstellungen';
+    return 'Der Fernseher konnte den Sender nicht abspielen' +
+      (tvService.port ? '' : ' (Stream-Dienst: ' + (tvService.error || 'nicht gestartet') + ')') + '.\n' +
+      'Möglich: alle Tuner der FRITZ!Box belegt.\nRote Taste: Einstellungen';
   }
 
   function zap(delta) {
@@ -413,13 +297,11 @@
   var infoTimer = null;
   var tunerTimer = null;
 
-  // Belegte/freie Tuner der FRITZ!Box (zählt auch andere Geräte mit); über den Dienst im TV, sonst den Proxy
+  // Belegte/freie Tuner der FRITZ!Box (zählt auch andere Geräte mit), über den Dienst im TV
   function fetchTuners() {
+    if (!tvService.port) return Promise.reject(new Error('Stream-Dienst läuft nicht'));
     var host = (settings.fritzHost || DEFAULTS.fritzHost).trim();
-    var url = tvService.port ? 'http://127.0.0.1:' + tvService.port + '/tuners?host=' + encodeURIComponent(host)
-      : proxyBase() ? proxyBase() + '/api/tuners' : null;
-    if (!url) return Promise.reject(new Error('keine Quelle'));
-    return fetchText(url, 5000).then(JSON.parse);
+    return fetchText('http://127.0.0.1:' + tvService.port + '/tuners?host=' + encodeURIComponent(host), 5000).then(JSON.parse);
   }
 
   function updateTuners() {
@@ -439,9 +321,6 @@
     $('info-num').textContent = state.index + 1;
     $('info-name').textContent = ch.name;
     $('info-list').textContent = listLabel(state.listId);
-    var via = $('info-via');
-    via.textContent = state.via === 'proxy' ? 'PROXY' : 'DIREKT';
-    via.className = 'badge ' + (state.via || '');
     $('info-clock').textContent = fmtTime(Date.now());
     renderInfoEpg();
     show($('infobar'), true);
@@ -766,10 +645,6 @@
     var cached = state.epgDetail[ch.url];
     if (cached) renderDetail(cached.events);
     else $('epg-events').innerHTML = '';
-    if (!epgSources().length) {
-      renderDetail(null, 'Keine Programminfos: Der Modus "Nur Proxy" braucht eine Proxy-Adresse.');
-      return;
-    }
     if (cached && Date.now() - cached.fetched < EPG_MAX_AGE) return;
     detailTimer = setTimeout(function () {
       fetchEpg('/api/epg/channel/' + b64url(ch.url)).then(function (r) {
@@ -792,9 +667,8 @@
     if (!events.length) {
       var empty = document.createElement('div');
       empty.className = 'epg-empty';
-      empty.textContent = message || (state.epgSource === 'service'
-        ? 'Noch keine Programminfos. Der Fernseher liest den EPG nach dem Start aus dem Kabelsignal ein, das dauert ein paar Minuten.'
-        : 'Keine Programminfos (der Proxy liest den EPG beim Start ein, das dauert ein paar Minuten).');
+      empty.textContent = message ||
+        'Noch keine Programminfos. Der Fernseher liest den EPG nach dem Start aus dem Kabelsignal ein, das dauert ein paar Minuten.';
       box.appendChild(empty);
       return;
     }
@@ -870,16 +744,13 @@
 
   var navEls = [];
   var navIndex = 0;
-  var draftMode = 'auto';
   var draftLan = false;
 
   function openSettings(message, bad) {
     state.view = 'settings';
     $('set-fritz').value = settings.fritzHost;
-    $('set-proxy').value = settings.proxyUrl;
-    draftMode = settings.mode;
     draftLan = !!settings.lanStatus;
-    renderMode();
+    renderLan();
     setSettingsStatus(message || '', bad);
     navEls = Array.prototype.slice.call(document.querySelectorAll('#settings .nav'));
     navIndex = 0;
@@ -893,11 +764,7 @@
     show($('settings'), false);
   }
 
-  function renderMode() {
-    var btns = document.querySelectorAll('#set-mode button');
-    for (var i = 0; i < btns.length; i++) {
-      btns[i].classList.toggle('active', btns[i].getAttribute('data-mode') === draftMode);
-    }
+  function renderLan() {
     var lan = document.querySelectorAll('#set-lan button');
     for (var j = 0; j < lan.length; j++) {
       lan[j].classList.toggle('active', (lan[j].getAttribute('data-lan') === 'on') === draftLan);
@@ -917,8 +784,6 @@
   function readDraft() {
     return {
       fritzHost: $('set-fritz').value.trim() || DEFAULTS.fritzHost,
-      proxyUrl: $('set-proxy').value.trim(),
-      mode: draftMode,
       lanStatus: draftLan
     };
   }
@@ -930,28 +795,13 @@
     var fritz = fetchText('http://' + d.fritzHost + '/dvb/m3u/tvhd.m3u', 5000)
       .then(function (t) { lines.push('FRITZ!Box: OK (' + parseM3U(t).length + ' HD-Sender)'); return true; })
       .catch(function (e) { lines.push('FRITZ!Box: nicht erreichbar (' + e.message + ')'); return false; });
-    var proxy = Promise.resolve(null);
-    if (d.proxyUrl) {
-      var base = d.proxyUrl.replace(/\/+$/, '');
-      if (!/^https?:\/\//.test(base)) base = 'http://' + base;
-      proxy = fetchText(base + '/api/status', 5000)
-        .then(function (t) {
-          var s = JSON.parse(t);
-          lines.push('Proxy: OK' + (s.ffmpeg ? '' : ' – aber ffmpeg fehlt!'));
-          return s.ffmpeg !== false;
-        })
-        .catch(function (e) { lines.push('Proxy: nicht erreichbar (' + e.message + ')'); return false; });
-    }
     lines.push('Stream-Dienst im TV: ' + (tvService.port ? 'läuft (Port ' + tvService.port + ')' : (tvService.error || 'nicht gestartet')));
-    Promise.all([fritz, proxy]).then(function (r) {
-      var bad = !r[0] || r[1] === false;
-      setSettingsStatus(lines.join('\n'), bad);
-    });
+    fritz.then(function (ok) { setSettingsStatus(lines.join('\n'), !ok); });
   }
 
   function saveSettings() {
     var d = readDraft();
-    var changed = d.fritzHost !== settings.fritzHost || d.proxyUrl !== settings.proxyUrl || d.mode !== settings.mode;
+    var changed = d.fritzHost !== settings.fritzHost;
     if (d.lanStatus !== !!settings.lanStatus) setTvServiceLan(d.lanStatus);
     settings = d;
     save('settings', settings);
@@ -960,9 +810,6 @@
       state.channels = {};
       state.epg = {};
       state.epgDetail = {};
-      state.epgProxyFailed = false;
-      state.directFailed = false;
-      save('directFailed.v3', false);
       start();
     }
   }
@@ -970,12 +817,9 @@
   function activateNav(el) {
     if (el.tagName === 'INPUT') {
       el.focus();
-    } else if (el.hasAttribute('data-mode')) {
-      draftMode = el.getAttribute('data-mode');
-      renderMode();
     } else if (el.hasAttribute('data-lan')) {
       draftLan = el.getAttribute('data-lan') === 'on';
-      renderMode();
+      renderLan();
     } else if (el.id === 'btn-test') testConnection();
     else if (el.id === 'btn-save') saveSettings();
     else if (el.id === 'btn-cancel') closeSettings();
@@ -1052,12 +896,11 @@
     ] },
     { title: 'Infoleiste', rows: [
       ['<span class="key yellow"></span> Gelb / Info', 'zeigt Sender, was gerade läuft und was danach kommt'],
-      ['DIREKT / PROXY', 'woher das Bild kommt: direkt von der FRITZ!Box oder über den Proxy'],
       ['Tuner', 'wie viele Tuner der FRITZ!Box belegt bzw. frei sind (zählt auch andere Geräte mit)']
     ] },
     { title: 'Einstellungen', rows: [
-      ['<span class="key red"></span> Rot', 'Einstellungen öffnen: Adresse der FRITZ!Box und des Proxys'],
-      ['Wiedergabe', 'Automatisch (erst direkt, sonst Proxy), Nur direkt oder Nur Proxy'],
+      ['<span class="key red"></span> Rot', 'Einstellungen öffnen: Adresse der FRITZ!Box'],
+      ['Statusseite', 'Stream-Dienst für die Fehlersuche aus dem Heimnetz erreichbar machen'],
       ['Anleitung', 'diese Anleitung jederzeit erneut anzeigen'],
       ['Zurück', 'im Fernsehbild beendet die App']
     ] }
@@ -1173,7 +1016,7 @@
     }).catch(function (e) {
       hideStatus();
       openSettings('Senderliste konnte nicht geladen werden:\n' + e.message +
-        '\nBitte Adresse der FRITZ!Box prüfen oder einen Proxy eintragen.', true);
+        '\nBitte Adresse der FRITZ!Box prüfen.', true);
     });
   }
 
