@@ -11,7 +11,7 @@ const path = require('path');
 const Service = require('webos-service');
 const { openStream, describeTuners, Epg, parseM3U } = require('./epg');
 
-const SERVICE_ID = 'de.local.kabeltv.service';
+const SERVICE_ID = 'de.merschie.kabelboxtv.service';
 const PORT = 8096;
 const MAX_BUFFERED = 8 * 1024 * 1024; // mehr Rückstau verwirft Daten statt den Speicher zu füllen
 

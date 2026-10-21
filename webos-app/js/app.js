@@ -88,7 +88,7 @@
   // ---------- Stream-Dienst auf dem Fernseher ----------
   // Der mitgelieferte Hintergrunddienst holt RTSP von der FRITZ!Box und gibt es per HTTP aus.
 
-  var SERVICE_URI = 'luna://de.local.kabeltv.service/start';
+  var SERVICE_URI = 'luna://de.merschie.kabelboxtv.service/start';
   var tvService = { port: null, bridge: null, error: null };
 
   function startTvService() {

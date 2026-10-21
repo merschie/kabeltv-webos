@@ -1,9 +1,9 @@
 {
-  "id": "de.local.kabeltv.service",
+  "id": "de.merschie.kabelboxtv.service",
   "description": "KabelBox TV Stream-Dienst",
   "services": [
     {
-      "name": "de.local.kabeltv.service",
+      "name": "de.merschie.kabelboxtv.service",
       "description": "KabelBox TV Stream-Dienst"
     }
   ]

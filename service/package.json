@@ -1,5 +1,5 @@
 {
-  "name": "de.local.kabeltv.service",
+  "name": "de.merschie.kabelboxtv.service",
   "version": "1.2.0",
   "description": "Holt die RTSP-Streams der FRITZ!Box und reicht sie per HTTP an den Videoplayer weiter",
   "main": "service.js",

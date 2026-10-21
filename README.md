@@ -56,7 +56,7 @@ ares-novacom --device tv --getkey
 Die Passphrase dafür zeigt die Developer-Mode-App an.
 
 ```bash
-ares-install --device tv dist/de.local.kabeltv_1.0.0_all.ipk
+ares-install --device tv dist/de.merschie.kabelboxtv_1.13.0_all.ipk
 ```
 
 Alternativ geht die Installation per Klick mit dem *webOS Dev Manager* (GitHub: webosbrew/dev-manager-desktop). Dort lässt sich die Dev-Mode-Session auch automatisch verlängern.

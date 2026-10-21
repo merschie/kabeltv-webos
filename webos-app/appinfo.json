@@ -1,6 +1,6 @@
 {
-  "id": "de.local.kabeltv",
-  "version": "1.12.0",
+  "id": "de.merschie.kabelboxtv",
+  "version": "1.13.0",
   "vendor": "Fabian",
   "type": "web",
   "main": "index.html",
