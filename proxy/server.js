@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const { spawn, spawnSync } = require('child_process');
-const { Epg } = require('./epg');
+const { Epg, describeTuners } = require('./epg');
 
 const PORT = Number(process.env.PORT) || 8095;
 const FRITZ_HOST = process.env.FRITZ_HOST || 'fritz.box';
@@ -214,6 +214,14 @@ async function handle(req, res) {
       epg: { enabled: EPG_ENABLED, scanning: epg.scanning, updated: epg.updated, channels: epg.channelKey.size },
       sessions: [...sessions.values()].map((s) => ({ id: s.id, url: s.url, idle: Math.round((Date.now() - s.lastAccess) / 1000) }))
     });
+  }
+
+  if (pathname === '/api/tuners') {
+    try {
+      return send(res, 200, await describeTuners(FRITZ_HOST));
+    } catch (e) {
+      return send(res, 502, { error: e.message });
+    }
   }
 
   if ((m = pathname.match(/^\/api\/channels\/(\w+)$/))) {

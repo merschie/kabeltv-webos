@@ -351,6 +351,26 @@
   // ---------- Anzeige ----------
 
   var infoTimer = null;
+  var tunerTimer = null;
+
+  // Belegte/freie Tuner der FRITZ!Box (zählt auch andere Geräte mit); über den Dienst im TV, sonst den Proxy
+  function fetchTuners() {
+    var host = (settings.fritzHost || DEFAULTS.fritzHost).trim();
+    var url = tvService.port ? 'http://127.0.0.1:' + tvService.port + '/tuners?host=' + encodeURIComponent(host)
+      : proxyBase() ? proxyBase() + '/api/tuners' : null;
+    if (!url) return Promise.reject(new Error('keine Quelle'));
+    return fetchText(url, 5000).then(JSON.parse);
+  }
+
+  function updateTuners() {
+    var el = $('info-tuners');
+    fetchTuners().then(function (t) {
+      if (!t.total) throw new Error('keine Angabe');
+      el.textContent = 'Tuner ' + t.used + '/' + t.total + ' belegt · ' + t.free + ' frei';
+      el.className = 'badge ' + (t.free === 0 ? 'full' : t.free === 1 ? 'low' : 'ok');
+      show(el, true);
+    }).catch(function () { show(el, false); });
+  }
 
   function showInfo() {
     var list = state.channels[state.listId] || [];
@@ -365,8 +385,15 @@
     $('info-clock').textContent = fmtTime(Date.now());
     renderInfoEpg();
     show($('infobar'), true);
+    // nach dem Senderwechsel belegt der neue Stream seinen Tuner erst nach ein paar Sekunden
+    updateTuners();
+    clearInterval(tunerTimer);
+    tunerTimer = setInterval(updateTuners, 2000);
     clearTimeout(infoTimer);
-    infoTimer = setTimeout(function () { show($('infobar'), false); }, 5000);
+    infoTimer = setTimeout(function () {
+      show($('infobar'), false);
+      clearInterval(tunerTimer);
+    }, 5000);
   }
 
   function renderInfoEpg() {

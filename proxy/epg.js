@@ -106,6 +106,45 @@ async function openStream(rtspUrl, onTsPacket, options = {}) {
   }
 }
 
+// Tunerbelegung der FRITZ!Box: DESCRIBE auf die Wurzel-URL listet alle laufenden Streams (auch fremder
+// Geräte). Freie Tuner stehen als "a=inactive", belegte mit Tunernummer in der fmtp-Zeile. Mehrere Streams
+// auf derselben Frequenz teilen sich einen Tuner.
+function describeTuners(host, port = 554) {
+  return new Promise((resolve, reject) => {
+    const sock = net.connect(port, host);
+    let buf = '';
+    const timer = setTimeout(() => { sock.destroy(); reject(new Error('RTSP DESCRIBE: keine Antwort')); }, 4000);
+    const finish = (fn) => { clearTimeout(timer); sock.destroy(); fn(); };
+    sock.on('connect', () => sock.write(`DESCRIBE rtsp://${host}:${port}/ RTSP/1.0\r\nCSeq: 1\r\nAccept: application/sdp\r\n\r\n`));
+    sock.on('error', (e) => finish(() => reject(e)));
+    sock.on('data', (d) => {
+      buf += d.toString('latin1');
+      const i = buf.indexOf('\r\n\r\n');
+      if (i < 0) return;
+      const len = Number((/content-length:\s*(\d+)/i.exec(buf.slice(0, i)) || [])[1]) || 0;
+      if (buf.length < i + 4 + len) return;
+      const status = Number(buf.split(' ')[1]);
+      const sdp = buf.slice(i + 4, i + 4 + len);
+      finish(() => {
+        // ohne laufende Streams antworten manche SAT>IP-Server mit 404
+        if (status !== 200 && status !== 404) return reject(new Error(`RTSP DESCRIBE: Status ${status}`));
+        // s=SatIPServer:1 <DVB-S2>,<DVB-T>,<DVB-C>
+        const caps = /^s=SatIPServer:1\s+([\d,]+)/m.exec(sdp);
+        const total = caps ? caps[1].split(',').reduce((a, n) => a + (Number(n) || 0), 0) : 0;
+        const used = new Set();
+        let streams = 0;
+        for (const media of sdp.split(/^m=/m).slice(1)) {
+          if (!/^a=sendonly/m.test(media)) continue;
+          streams++;
+          const t = /tuner=(\d+)/.exec(media);
+          used.add(t ? t[1] : `s${streams}`);
+        }
+        resolve({ total, used: used.size, free: Math.max(0, total - used.size), streams });
+      });
+    });
+  });
+}
+
 // ---------- MPEG-TS-Sektionen ----------
 
 const CRC_TABLE = new Uint32Array(256).map((_, i) => {
@@ -430,7 +469,7 @@ class Epg {
   }
 }
 
-module.exports = { Epg, scanMux, parseEit, dvbText, openStream };
+module.exports = { Epg, scanMux, parseEit, dvbText, openStream, describeTuners };
 
 // Test von der Kommandozeile: node epg.js <rtsp-url> [sekunden]
 if (require.main === module) {

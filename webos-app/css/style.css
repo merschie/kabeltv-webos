@@ -146,6 +146,9 @@ html, body {
 }
 #info-via.direct { border-color: #2ecc71; color: #2ecc71; }
 #info-via.proxy { border-color: #f1c40f; color: #f1c40f; }
+#info-tuners.ok { border-color: #2ecc71; color: #2ecc71; }
+#info-tuners.low { border-color: #f1c40f; color: #f1c40f; }
+#info-tuners.full { border-color: #e74c3c; color: #e74c3c; }
 
 /* Panels */
 .panel {

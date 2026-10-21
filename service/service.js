@@ -6,7 +6,7 @@
 
 const http = require('http');
 const Service = require('webos-service');
-const { openStream } = require('./epg'); // beim Paketieren aus proxy/epg.js kopiert
+const { openStream, describeTuners } = require('./epg'); // beim Paketieren aus proxy/epg.js kopiert
 
 const SERVICE_ID = 'de.local.kabeltv.service';
 const PORT = 8096;
@@ -100,6 +100,17 @@ const server = http.createServer((req, res) => {
   if (path === '/status') {
     res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
     res.end(JSON.stringify({ ok: true, node: process.version, streaming: current ? current.id : null, log: logLines }));
+    return;
+  }
+  if (path === '/tuners') {
+    // Belegung aller FRITZ!Box-Tuner, auch durch andere Geräte
+    const host = new URL(req.url, 'http://x').searchParams.get('host') || 'fritz.box';
+    const json = (status, body) => {
+      res.writeHead(status, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify(body));
+    };
+    if (!isAllowed(`rtsp://${host}/`)) return json(403, { error: 'Adresse nicht erlaubt' });
+    describeTuners(host).then((t) => json(200, t), (e) => json(502, { error: e.message }));
     return;
   }
   const m = path.match(/^\/stream\/([\w-]+)$/);
