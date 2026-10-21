@@ -951,7 +951,7 @@
   // ---------- Anleitung ----------
 
   var TUTORIAL = [
-    { title: 'Willkommen bei Kabel TV', rows: [
+    { title: 'Willkommen bei KabelBox TV', rows: [
       ['', 'Live-Fernsehen und Radio direkt von der FRITZ!Box – alles mit der normalen Fernbedienung.'],
       ['', 'Die nächsten Seiten zeigen kurz, welche Taste was macht. Das Bild läuft im Hintergrund schon los.'],
       ['&#9664; &#9654;', 'blättern, OK geht weiter, Zurück überspringt die Anleitung']

@@ -30,7 +30,7 @@ function Ares([string]$tool) {
 
 $appinfo = Get-Content webos-app\appinfo.json -Raw | ConvertFrom-Json
 $ipk = "dist\$($appinfo.id)_$($appinfo.version)_all.ipk"
-Write-Host "== Kabel TV $($appinfo.version)"
+Write-Host "== KabelBox TV $($appinfo.version)"
 
 Write-Host '== App und Stream-Dienst paketieren'
 New-Item -ItemType Directory -Force dist | Out-Null

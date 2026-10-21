@@ -1,4 +1,4 @@
-# Kabel TV – FRITZ!Box-Cable-Streams auf dem LG-Fernseher
+# KabelBox TV – FRITZ!Box-Cable-Streams auf dem LG-Fernseher
 
 Diese webOS-App zeigt die DVB-C-Sender der FRITZ!Box (Listen HD, SD und Radio) auf dem LG C3.
 
