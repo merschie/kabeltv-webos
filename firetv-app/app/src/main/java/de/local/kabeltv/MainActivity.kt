@@ -995,7 +995,7 @@ class MainActivity : AppCompatActivity() {
     private class TutPage(val title: String, val rows: List<Pair<String, String>>)
 
     private val tutorial = listOf(
-        TutPage("Willkommen bei Kabel TV", listOf(
+        TutPage("Willkommen bei KabelBox TV", listOf(
             "" to "Live-Fernsehen und Radio direkt von der FRITZ!Box – alles mit der normalen Fernbedienung.",
             "" to "Die nächsten Seiten zeigen kurz, welche Taste was macht. Das Bild läuft im Hintergrund schon los.",
             "◀ ▶" to "blättern, OK geht weiter, Zurück überspringt die Anleitung"

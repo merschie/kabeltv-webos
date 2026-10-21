@@ -1,4 +1,4 @@
-# Kabel TV für den Fire TV Stick
+# KabelBox TV für den Fire TV Stick
 
 Android-TV-App (Kotlin, Media3/ExoPlayer) für die Sender der FRITZ!Box 6660 Cable, mit denselben Funktionen wie die webOS-App: Listen HD, SD und Radio, Senderliste mit Programm, Ladeanzeige mit Senderlogo, Infoleiste mit Jetzt/Danach und Tuner-Anzeige, Einstellungen und Anleitung beim ersten Start.
 
