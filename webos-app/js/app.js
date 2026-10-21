@@ -511,7 +511,7 @@
     rtl2: 'rtl-zwei', rtlnitro: 'nitro', superrtl: 'rtl-super', rtlsuper: 'rtl-super',
     kabel1: 'kabel-eins', kabel1doku: 'kabel-eins-doku', kabel1classics: 'kabel-eins-classics',
     servustv: 'servus-tv-deutchland', servustvdeutschland: 'servus-tv-deutchland',
-    euronews: 'euronews-deutsch', eurosport: 'eurosport-1', hse24: 'hse',
+    euronews: 'euronews-deutsch', eurosport: 'eurosport-1', hse24: 'hse', qvc2: 'qvc-zwei',
     ndrfshh: 'ndr-hamburg', ndrfsmv: 'ndr-mecklenburg-vorpommern', ndrfssh: 'ndr-schleswig-holstein',
     mdrsachsenanhalt: 'mdr-sachsen-anhalt', mdrthuringen: 'mdr-thuringen',
     welttv: 'welt', ntvhd: 'ntv', dmf: 'deutsches-musik-fernsehen'
