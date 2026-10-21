@@ -95,6 +95,14 @@ App neu bauen nach Änderungen:
 ares-package webos-app -o dist
 ```
 
+## Deploy in einem Schritt
+
+`scripts/deploy.ps1` baut die `.ipk`, kopiert alles auf den Unraid-Server, baut dort den Container neu und installiert die App auf dem Fernseher. Mit `-NoTv` aktualisiert es nur den Server. Adressen und Pfade lassen sich als Parameter ändern (siehe Kopf des Skripts).
+
+```powershell
+.\scripts\deploy.ps1
+```
+
 ## Hinweise
 
 - Die FRITZ!Box liefert nur unverschlüsselte Sender, also keine privaten Sender in HD.
