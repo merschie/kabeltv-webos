@@ -43,7 +43,7 @@ cd firetv-app
 .\gradlew.bat assembleDebug
 ```
 
-Die APK liegt danach unter `app\build\outputs\apk\debug\app-debug.apk`.
+Unit-Tests und Lint laufen mit `.\gradlew.bat testDebugUnitTest lintDebug`. Die APK liegt danach unter `app\build\outputs\apk\debug\app-debug.apk`.
 
 ## Fire TV Stick vorbereiten
 
