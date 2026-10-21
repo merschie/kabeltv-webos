@@ -3,13 +3,17 @@
 Diese webOS-App zeigt die DVB-C-Sender der FRITZ!Box (Listen HD, SD und Radio) auf dem LG C3.
 
 ```
-FRITZ!Box (RTSP) ──────────────────────────────▶ LG C3   Modus "Direkt"
-FRITZ!Box (RTSP) ──▶ Unraid-Proxy (HLS) ───────▶ LG C3   Modus "Proxy"
+FRITZ!Box (RTSP) ──▶ Stream-Dienst im TV (HTTP, MPEG-TS) ──▶ Videoplayer   Modus "Direkt"
+FRITZ!Box (RTSP) ──▶ Unraid-Proxy (HLS) ─────────────────▶ LG C3         Modus "Proxy"
 ```
 
-- **Automatisch** (Standard): Die App versucht zuerst die Direktwiedergabe. Klappt das nicht, schaltet sie auf den Proxy um und bleibt bis zum nächsten Start dabei.
-- **Nur direkt**: Es wird kein Zusatzgerät gebraucht. Ob der C3 die RTSP-Streams selbst abspielt, muss sich noch zeigen.
-- **Nur Proxy**: Der Docker-Container auf Unraid wandelt die Streams verlustfrei in HLS um. Bild und Ton bleiben dabei unverändert, nur der Ton wird nach AAC gewandelt.
+Der Videoplayer von webOS spielt kein RTSP. Deshalb bringt die App einen kleinen Hintergrunddienst mit (`service/`, Node.js auf dem Fernseher). Er holt den Sender per RTSP/RTP von der FRITZ!Box und reicht das MPEG-TS unverändert über `http://127.0.0.1:8096` an den Player weiter. Ein zusätzliches Gerät ist dafür nicht nötig.
+
+- **Automatisch** (Standard): erst direkt über den Stream-Dienst, bei Problemen über den Proxy.
+- **Nur direkt**: nur über den Stream-Dienst im Fernseher. Ist der Dienst nicht verfügbar, wird die RTSP-Adresse direkt versucht.
+- **Nur Proxy**: Der Docker-Container wandelt die Streams in HLS um. Das Bild bleibt unverändert, nur der Ton wird nach AAC gewandelt.
+
+Der Programmführer (EPG) kommt zurzeit noch vom Proxy.
 
 ## Bedienung
 
@@ -25,7 +29,7 @@ FRITZ!Box (RTSP) ──▶ Unraid-Proxy (HLS) ───────▶ LG C3   M
 
 Mit dem Magic-Remote-Zeiger lässt sich ebenfalls alles anklicken.
 
-## 1. Proxy auf Unraid (192.168.177.80)
+## 1. Proxy auf Unraid (optional, für EPG und als Reserve)
 
 Den Projektordner (mit `proxy/`, `webos-app/` und `docker-compose.yml`) zum Beispiel nach `/mnt/user/appdata/kabeltv` kopieren. Dann im Unraid-Terminal:
 
@@ -89,10 +93,10 @@ ares-install --device tv dist/de.local.kabeltv_1.0.0_all.ipk
 
 Alternativ geht die Installation per Klick mit dem *webOS Dev Manager* (GitHub: webosbrew/dev-manager-desktop). Dort lässt sich die Dev-Mode-Session auch automatisch verlängern.
 
-App neu bauen nach Änderungen:
+App mit Stream-Dienst neu bauen (der Dienst nutzt den RTSP-Client aus `proxy/epg.js`):
 
 ```bash
-ares-package webos-app -o dist
+cp proxy/epg.js service/epg.js && ares-package webos-app service -o dist
 ```
 
 ## Deploy in einem Schritt

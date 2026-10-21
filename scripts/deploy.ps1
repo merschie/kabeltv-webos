@@ -37,9 +37,10 @@ $appinfo = Get-Content webos-app\appinfo.json -Raw | ConvertFrom-Json
 $ipk = "dist\$($appinfo.id)_$($appinfo.version)_all.ipk"
 Write-Host "== Kabel TV $($appinfo.version)"
 
-Write-Host '== App paketieren'
+Write-Host '== App und Stream-Dienst paketieren'
 New-Item -ItemType Directory -Force dist | Out-Null
-Ares ares-package webos-app -o dist
+Copy-Item proxy\epg.js service\epg.js -Force   # RTSP-Client teilen sich Proxy und Dienst
+Ares ares-package webos-app service -o dist
 
 Write-Host "== Dateien nach $Share kopieren"
 robocopy proxy "$Share\proxy" server.js epg.js package.json Dockerfile /NJH /NJS /NFL /NDL | Out-Null

@@ -10,18 +10,25 @@ const SI_PIDS = '0,17,18';
 
 // ---------- RTSP-Minimalclient (SAT>IP, RTP über UDP) ----------
 
-async function openStream(rtspUrl, onTsPacket) {
+// onTsPacket(buf, offset) bekommt jedes TS-Paket einzeln; mit options.onPayload(buf) kommen stattdessen
+// die TS-Daten eines RTP-Pakets am Stück (für das Durchreichen ganzer Streams).
+async function openStream(rtspUrl, onTsPacket, options = {}) {
   const u = new URL(rtspUrl);
   const udp = dgram.createSocket('udp4');
   await new Promise((resolve, reject) => {
     udp.once('error', reject);
     udp.bind(0, resolve);
   });
+  try { udp.setRecvBufferSize(8 * 1024 * 1024); } catch { /* System-Limit greift */ }
   const port = udp.address().port;
   udp.on('message', (msg) => {
     if (msg.length < 12) return;
     let off = 12 + (msg[0] & 0x0f) * 4;
     if (msg[0] & 0x10) off += 4 + msg.readUInt16BE(off + 2) * 4;
+    if (options.onPayload) {
+      if (off < msg.length) options.onPayload(msg.subarray(off));
+      return;
+    }
     for (; off + 188 <= msg.length; off += 188) {
       if (msg[off] === 0x47) onTsPacket(msg, off);
     }
@@ -423,7 +430,7 @@ class Epg {
   }
 }
 
-module.exports = { Epg, scanMux, parseEit, dvbText };
+module.exports = { Epg, scanMux, parseEit, dvbText, openStream };
 
 // Test von der Kommandozeile: node epg.js <rtsp-url> [sekunden]
 if (require.main === module) {

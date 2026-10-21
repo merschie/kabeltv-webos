@@ -56,7 +56,7 @@
     index: 0,
     via: null,             // 'direct' | 'proxy'
     proxyStream: null,     // aktuell genutzte Proxy-URL zum Freigeben
-    directFailed: load('directFailed', false), // im Auto-Modus: Direktwiedergabe hat schon einmal versagt
+    directFailed: load('directFailed.v3', false), // im Auto-Modus: Direktwiedergabe hat schon einmal versagt
     playToken: 0,
     epg: {},               // listId -> { channels: {url: [jetzt, danach]}, fetched }
     epgDetail: {},         // url -> { events, fetched }
@@ -100,6 +100,49 @@
 
   function proxyStreamUrl(rtspUrl) {
     return proxyBase() + '/hls/' + b64url(rtspUrl) + '/index.m3u8';
+  }
+
+  // ---------- Stream-Dienst auf dem Fernseher ----------
+  // Der mitgelieferte Hintergrunddienst holt RTSP von der FRITZ!Box und gibt es per HTTP aus.
+
+  var SERVICE_URI = 'luna://de.local.kabeltv.service/start';
+  var tvService = { port: null, bridge: null, error: null };
+
+  function startTvService() {
+    if (typeof window.PalmServiceBridge === 'undefined') {
+      tvService.error = 'kein webOS';
+      return;
+    }
+    try {
+      var bridge = new window.PalmServiceBridge();
+      bridge.onservicecallback = function (msg) {
+        try {
+          var r = JSON.parse(msg);
+          if (r.returnValue && r.port) tvService.port = r.port;
+          else tvService.error = r.errorText || 'Dienst antwortet nicht';
+        } catch (e) { tvService.error = 'ungültige Antwort'; }
+      };
+      // Abo hält den Dienst am Leben, solange die App läuft
+      bridge.call(SERVICE_URI, JSON.stringify({ subscribe: true }));
+      tvService.bridge = bridge;
+    } catch (e) {
+      tvService.error = e.message;
+    }
+  }
+
+  // Wartet kurz auf den Dienst, damit der erste Senderstart nicht an der Startreihenfolge scheitert
+  function waitForTvService(ms) {
+    return new Promise(function (resolve) {
+      var end = Date.now() + ms;
+      (function check() {
+        if (tvService.port || tvService.error || Date.now() > end) resolve(tvService.port);
+        else setTimeout(check, 100);
+      })();
+    });
+  }
+
+  function directStreamUrl(rtspUrl) {
+    return tvService.port ? 'http://127.0.0.1:' + tvService.port + '/stream/' + b64url(rtspUrl) : rtspUrl;
   }
 
   function listLabel(id) {
@@ -260,21 +303,26 @@
         return;
       }
       var via = order[i];
-      var url = via === 'direct' ? ch.url : proxyStreamUrl(ch.url);
-      if (via === 'proxy') state.proxyStream = url;
       state.via = via;
       showStatus('Lade ' + ch.name + (via === 'proxy' ? ' über Proxy' : '') + ' …');
 
-      tryPlay(url, via === 'direct' ? DIRECT_TIMEOUT : PROXY_TIMEOUT, token).then(function (ok) {
+      var ready = via === 'direct' ? waitForTvService(3000) : Promise.resolve();
+      ready.then(function () {
+        if (token !== state.playToken) return false;
+        var url = via === 'direct' ? directStreamUrl(ch.url) : proxyStreamUrl(ch.url);
+        if (via === 'proxy') state.proxyStream = url;
+        return tryPlay(url, via === 'direct' ? DIRECT_TIMEOUT : PROXY_TIMEOUT, token);
+      }).then(function (ok) {
         if (token !== state.playToken) return;
         if (ok) {
           hideStatus();
           showInfo();
           return;
         }
-        if (via === 'direct' && settings.mode === 'auto') {
+        // Nur merken, wenn es ohne Stream-Dienst war; mit Dienst sind Fehler eher vorübergehend (Tuner belegt)
+        if (via === 'direct' && settings.mode === 'auto' && !tvService.port) {
           state.directFailed = true;
-          save('directFailed', true);
+          save('directFailed.v3', true);
         }
         if (via === 'proxy') releaseProxy();
         step(i + 1);
@@ -285,8 +333,9 @@
 
   function failureHint() {
     if (settings.mode === 'direct' || !proxyBase()) {
-      return 'Der Fernseher konnte den Stream nicht direkt abspielen.\n' +
-        'Möglich: alle Tuner der FRITZ!Box belegt, oder das TV kann RTSP nicht.\n' +
+      return 'Der Fernseher konnte den Stream nicht direkt abspielen' +
+        (tvService.port ? '' : ' (Stream-Dienst: ' + (tvService.error || 'nicht gestartet') + ')') + '.\n' +
+        'Möglich: alle Tuner der FRITZ!Box belegt.\n' +
         'Ein Proxy (siehe Anleitung) löst das zuverlässig. Rote Taste: Einstellungen';
     }
     return 'Auch der Proxy konnte den Sender nicht liefern.\n' +
@@ -630,6 +679,7 @@
         })
         .catch(function (e) { lines.push('Proxy: nicht erreichbar (' + e.message + ')'); return false; });
     }
+    lines.push('Stream-Dienst im TV: ' + (tvService.port ? 'läuft (Port ' + tvService.port + ')' : (tvService.error || 'nicht gestartet')));
     Promise.all([fritz, proxy]).then(function (r) {
       var bad = !r[0] || r[1] === false;
       setSettingsStatus(lines.join('\n'), bad);
@@ -645,7 +695,7 @@
     if (changed) {
       state.channels = {};
       state.directFailed = false;
-      save('directFailed', false);
+      save('directFailed.v3', false);
       start();
     }
   }
@@ -777,5 +827,6 @@
     });
   }
 
+  startTvService();
   start();
 })();

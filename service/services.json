@@ -1,0 +1,10 @@
+{
+  "id": "de.local.kabeltv.service",
+  "description": "Kabel TV Stream-Dienst",
+  "services": [
+    {
+      "name": "de.local.kabeltv.service",
+      "description": "Kabel TV Stream-Dienst"
+    }
+  ]
+}
