@@ -16,8 +16,20 @@
 
   <!-- Laden / Fehler -->
   <div id="status" class="hidden">
-    <div class="spinner"></div>
-    <div id="status-text"></div>
+    <div id="status-bg">
+      <img id="status-logo" class="hidden" alt="">
+      <div id="status-logo-name" class="hidden"></div>
+    </div>
+    <div class="status-box">
+      <div class="status-row">
+        <div class="spinner"></div>
+        <div>
+          <div id="status-text"></div>
+          <div id="status-step" class="hidden"></div>
+        </div>
+      </div>
+      <div class="loadbar"><div id="status-bar"></div></div>
+    </div>
   </div>
   <div id="error" class="hidden">
     <div id="error-title"></div>
@@ -34,6 +46,7 @@
       <div id="info-name"></div>
       <div id="info-list" class="badge"></div>
       <div id="info-via" class="badge"></div>
+      <div id="info-tuners" class="badge hidden"></div>
       <div id="info-clock"></div>
     </div>
     <div id="info-epg" class="hidden">
@@ -73,10 +86,23 @@
       <button class="nav" id="btn-test">Verbindung testen</button>
       <button class="nav primary" id="btn-save">Speichern</button>
       <button class="nav" id="btn-cancel">Abbrechen</button>
+      <button class="nav" id="btn-tutorial">Anleitung</button>
     </div>
     <div id="settings-status"></div>
   </div>
 
+  <!-- Kurze Anleitung beim ersten Start -->
+  <div id="tutorial" class="hidden">
+    <div class="tut-box">
+      <div id="tut-step"></div>
+      <h1 id="tut-title"></h1>
+      <div id="tut-body"></div>
+      <div id="tut-dots"></div>
+      <div class="tut-hint">&#9664;&#9654; Blättern &nbsp; OK <span id="tut-ok">Weiter</span> &nbsp; Zurück Überspringen</div>
+    </div>
+  </div>
+
+  <script src="js/logos.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

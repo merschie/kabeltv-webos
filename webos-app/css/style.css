@@ -38,15 +38,73 @@ html, body {
 /* Laden */
 #status {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  inset: 0;
   display: flex;
   align-items: center;
-  gap: 24px;
+  justify-content: center;
+  pointer-events: none;
+}
+/* Beim Senderwechsel: Schwarzbild/Standbild ganz abdecken */
+#status.cover { background: radial-gradient(circle at 50% 40%, #16213a, #000 75%); }
+/* Senderlogo (sonst Sendername) groß im Hintergrund, Ladebox darunter */
+#status-bg {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 12%;
+  height: 52%;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+#status.cover #status-bg { display: flex; }
+#status.cover .status-box { margin-top: 560px; }
+#status-logo {
+  width: 900px;
+  height: 85%;
+  object-fit: contain;
+  opacity: .85;
+}
+#status-logo-name {
+  padding: 0 80px;
+  font-size: 120px;
+  font-weight: bold;
+  text-align: center;
+  color: rgba(255, 255, 255, .25);
+}
+.status-box {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 560px;
   padding: 24px 40px;
   background: rgba(0, 0, 0, .7);
   border-radius: 16px;
+}
+.status-row { display: flex; align-items: center; gap: 24px; }
+#status-step { margin-top: 6px; font-size: 24px; color: #9ab; }
+.loadbar {
+  position: relative;
+  height: 8px;
+  background: rgba(255, 255, 255, .15);
+  border-radius: 4px;
+  overflow: hidden;
+}
+#status-bar {
+  height: 100%;
+  width: 0;
+  background: #4ea1ff;
+  transition: width .3s ease-out;
+}
+/* Nachladen: Fortschritt unbekannt, daher laufender Balken */
+#status.buffering #status-bar {
+  width: 30% !important;
+  transition: none;
+  animation: loadbar-run 1.2s ease-in-out infinite;
+}
+@keyframes loadbar-run {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(340%); }
 }
 .spinner {
   width: 48px;
@@ -115,6 +173,9 @@ html, body {
 }
 #info-via.direct { border-color: #2ecc71; color: #2ecc71; }
 #info-via.proxy { border-color: #f1c40f; color: #f1c40f; }
+#info-tuners.ok { border-color: #2ecc71; color: #2ecc71; }
+#info-tuners.low { border-color: #f1c40f; color: #f1c40f; }
+#info-tuners.full { border-color: #e74c3c; color: #e74c3c; }
 
 /* Panels */
 .panel {
@@ -234,3 +295,43 @@ html, body {
 #settings-status { min-height: 40px; margin-top: 24px; color: #ccc; white-space: pre-line; line-height: 1.4; }
 #settings-status.ok { color: #2ecc71; }
 #settings-status.bad { color: #ff7b6b; }
+
+/* Anleitung */
+#tutorial {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, .75);
+}
+.tut-box {
+  width: 1200px;
+  padding: 48px 64px 36px;
+  background: rgba(12, 16, 26, .97);
+  border-radius: 20px;
+  box-shadow: 0 0 60px rgba(0, 0, 0, .8);
+}
+#tut-step { font-size: 24px; color: #9ab; }
+#tut-title { margin: 8px 0 28px; font-size: 52px; font-weight: normal; }
+#tut-body { min-height: 300px; line-height: 1.5; }
+.tut-row { display: flex; gap: 28px; margin-bottom: 18px; }
+.tut-key {
+  flex: none;
+  align-self: flex-start;
+  min-width: 260px;
+  padding: 2px 16px;
+  text-align: center;
+  color: #fff;
+  background: #1e2533;
+  border: 2px solid #333c4f;
+  border-radius: 10px;
+}
+.tut-text { color: #ddd; }
+.tut-key .key { width: 30px; height: 18px; }
+.key.green { background: #2ecc71; }
+.key.yellow { background: #f1c40f; }
+#tut-dots { display: flex; justify-content: center; gap: 14px; margin-top: 28px; }
+#tut-dots span { width: 14px; height: 14px; border-radius: 50%; background: rgba(255, 255, 255, .2); }
+#tut-dots span.active { background: #4ea1ff; }
+.tut-hint { margin-top: 24px; font-size: 22px; color: #888; text-align: center; }

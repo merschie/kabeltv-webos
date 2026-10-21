@@ -60,6 +60,8 @@
     playToken: 0,
     epg: {},               // listId -> { channels: {url: [jetzt, danach]}, fetched }
     epgDetail: {},         // url -> { events, fetched }
+    epgSource: null,       // 'proxy' | 'service': woher der EPG zuletzt kam
+    epgProxyFailed: false, // im Auto-Modus: Proxy liefert keinen EPG, Dienst im TV fragen
     view: 'tv',            // 'tv' | 'channels' | 'settings'
     overlayListId: null,
     overlayIndex: 0
@@ -162,15 +164,58 @@
     return Math.max(0, Math.min(1, p)) * 100;
   }
 
-  // ---------- Programmführer (kommt vom Proxy) ----------
+  // ---------- Programmführer ----------
+  // Kommt vom Proxy oder vom Stream-Dienst im Fernseher, der ihn selbst aus dem Kabelsignal liest.
 
   var EPG_MAX_AGE = 120000;
 
+  function serviceBase() {
+    return tvService.port ? 'http://127.0.0.1:' + tvService.port : '';
+  }
+
+  // Reihenfolge der EPG-Quellen: "Nur Proxy" fragt nur den Proxy, "Nur direkt" nur den Dienst,
+  // "Automatisch" erst den Proxy (dann braucht der Fernseher keinen eigenen Tuner dafür).
+  function epgSources() {
+    if (settings.mode === 'proxy') return proxyBase() ? ['proxy'] : [];
+    if (settings.mode === 'direct' || !proxyBase() || state.epgProxyFailed) return ['service'];
+    return ['proxy', 'service'];
+  }
+
+  function epgUrl(source, path) {
+    if (source === 'proxy') return proxyBase() + path;
+    var host = (settings.fritzHost || DEFAULTS.fritzHost).trim();
+    return serviceBase() + path + '?host=' + encodeURIComponent(host);
+  }
+
+  function fetchEpg(path) {
+    var sources = epgSources();
+    var attempt = function (i) {
+      if (i >= sources.length) return Promise.reject(new Error('keine EPG-Quelle'));
+      var source = sources[i];
+      var ready = source === 'service' ? waitForTvService(3000) : Promise.resolve();
+      return ready.then(function () {
+        if (source === 'service' && !serviceBase()) throw new Error('Stream-Dienst läuft nicht');
+        return fetchText(epgUrl(source, path), 8000);
+      }).then(function (t) {
+        state.epgSource = source;
+        return JSON.parse(t);
+      }).catch(function (e) {
+        if (source === 'proxy' && i + 1 < sources.length) state.epgProxyFailed = true;
+        if (i + 1 < sources.length) return attempt(i + 1);
+        throw e;
+      });
+    };
+    return attempt(0);
+  }
+
   function loadEpg(listId) {
     var cached = state.epg[listId];
-    if (!proxyBase() || (cached && Date.now() - cached.fetched < EPG_MAX_AGE)) return;
-    fetchText(proxyBase() + '/api/epg/' + listId, 8000).then(function (t) {
-      state.epg[listId] = { channels: JSON.parse(t).channels || {}, fetched: Date.now() };
+    if (!epgSources().length || (cached && Date.now() - cached.fetched < EPG_MAX_AGE)) return;
+    fetchEpg('/api/epg/' + listId).then(function (r) {
+      var channels = r.channels || {};
+      // Solange der Fernseher noch einliest, bald wieder nachfragen
+      var fetched = Object.keys(channels).length || !r.scanning ? Date.now() : Date.now() - EPG_MAX_AGE + 20000;
+      state.epg[listId] = { channels: channels, fetched: fetched, scanning: !!r.scanning };
       if (state.view === 'channels' && state.overlayListId === listId) refreshNowLines();
       if (listId === state.listId && !$('infobar').classList.contains('hidden')) renderInfoEpg();
     }).catch(function () { /* ohne EPG weiter */ });
@@ -229,6 +274,7 @@
     video.removeAttribute('src');
     video.load();
     releaseProxy();
+    hideStatus();
   }
 
   // Spielt eine URL ab und meldet true, sobald Bild/Ton läuft, sonst false.
@@ -286,7 +332,7 @@
     setRadio(listId === 'radio' ? ch.name : null);
     loadEpg(listId);
     showInfo();
-    showStatus('Lade ' + ch.name + ' …');
+    startLoader(ch.name, 'Sender wird vorbereitet', ch.name);
 
     var order = playbackOrder();
     if (!order.length) {
@@ -304,18 +350,23 @@
       }
       var via = order[i];
       state.via = via;
-      showStatus('Lade ' + ch.name + (via === 'proxy' ? ' über Proxy' : '') + ' …');
+      if (via === 'proxy') {
+        startLoader(ch.name + ' (Proxy)', i > 0 ? 'Direkt ging nicht, versuche den Proxy' : 'Proxy startet den Sender', ch.name);
+      } else {
+        startLoader(ch.name, tvService.port ? 'Verbindung zur FRITZ!Box wird aufgebaut' : 'Stream-Dienst im Fernseher wird gestartet', ch.name);
+      }
 
       var ready = via === 'direct' ? waitForTvService(3000) : Promise.resolve();
       ready.then(function () {
         if (token !== state.playToken) return false;
+        if (via === 'direct') setLoaderBar(10, 'Verbindung zur FRITZ!Box wird aufgebaut');
         var url = via === 'direct' ? directStreamUrl(ch.url) : proxyStreamUrl(ch.url);
         if (via === 'proxy') state.proxyStream = url;
         return tryPlay(url, via === 'direct' ? DIRECT_TIMEOUT : PROXY_TIMEOUT, token);
       }).then(function (ok) {
         if (token !== state.playToken) return;
         if (ok) {
-          hideStatus();
+          // Ladeanzeige verschwindet von selbst, sobald das Bild wirklich läuft
           showInfo();
           return;
         }
@@ -350,6 +401,26 @@
   // ---------- Anzeige ----------
 
   var infoTimer = null;
+  var tunerTimer = null;
+
+  // Belegte/freie Tuner der FRITZ!Box (zählt auch andere Geräte mit); über den Dienst im TV, sonst den Proxy
+  function fetchTuners() {
+    var host = (settings.fritzHost || DEFAULTS.fritzHost).trim();
+    var url = tvService.port ? 'http://127.0.0.1:' + tvService.port + '/tuners?host=' + encodeURIComponent(host)
+      : proxyBase() ? proxyBase() + '/api/tuners' : null;
+    if (!url) return Promise.reject(new Error('keine Quelle'));
+    return fetchText(url, 5000).then(JSON.parse);
+  }
+
+  function updateTuners() {
+    var el = $('info-tuners');
+    fetchTuners().then(function (t) {
+      if (!t.total) throw new Error('keine Angabe');
+      el.textContent = 'Tuner ' + t.used + '/' + t.total + ' belegt · ' + t.free + ' frei';
+      el.className = 'badge ' + (t.free === 0 ? 'full' : t.free === 1 ? 'low' : 'ok');
+      show(el, true);
+    }).catch(function () { show(el, false); });
+  }
 
   function showInfo() {
     var list = state.channels[state.listId] || [];
@@ -364,8 +435,15 @@
     $('info-clock').textContent = fmtTime(Date.now());
     renderInfoEpg();
     show($('infobar'), true);
+    // nach dem Senderwechsel belegt der neue Stream seinen Tuner erst nach ein paar Sekunden
+    updateTuners();
+    clearInterval(tunerTimer);
+    tunerTimer = setInterval(updateTuners, 2000);
     clearTimeout(infoTimer);
-    infoTimer = setTimeout(function () { show($('infobar'), false); }, 5000);
+    infoTimer = setTimeout(function () {
+      show($('infobar'), false);
+      clearInterval(tunerTimer);
+    }, 5000);
   }
 
   function renderInfoEpg() {
@@ -385,8 +463,173 @@
     $('radio-name').textContent = name || '';
   }
 
-  function showStatus(text) { $('status-text').textContent = text; show($('status'), true); }
-  function hideStatus() { show($('status'), false); }
+  function showStatus(text) { startLoader(text, ''); }
+  function hideStatus() {
+    loader.phase = 'idle';
+    show($('status'), false);
+  }
+
+  // ---------- Ladeanzeige ----------
+  // Deckt beim Senderwechsel Schwarzbild und Standbild ab, bis die Zeit im Video wirklich läuft.
+  // Danach erscheint sie wieder, wenn die Wiedergabe hängt (Nachladen).
+
+  var START_HOLD = 0.6;      // Sekunden echter Wiedergabe, bevor die Abdeckung verschwindet
+  var START_MAX = 8000;      // spätestens dann weg, auch wenn die Zeit nicht weiterläuft
+  var STALL_MS = 1000;       // so lange ohne Fortschritt gilt als Hänger
+  var RECONNECT_MS = 20000;  // so lange hängend, dann Sender neu starten
+
+  var loader = {
+    phase: 'idle',           // 'idle' | 'starting' | 'running' | 'buffering'
+    pct: 0,
+    playingAt: 0,
+    startTime: 0,
+    lastTime: 0,
+    lastMove: 0,
+    waitingAt: 0
+  };
+
+  function setLoaderBar(pct, step) {
+    if (pct < loader.pct) return;
+    loader.pct = pct;
+    $('status-bar').style.width = pct + '%';
+    if (step !== undefined) setLoaderStep(step);
+  }
+
+  function setLoaderStep(step) {
+    $('status-step').textContent = step;
+    show($('status-step'), !!step);
+  }
+
+  // ---------- Senderlogos ----------
+  // Logos liegen in logos/<schlüssel>.png, die Liste steht in js/logos.js.
+  // Der Sendername wird vereinfacht ("ZDFneo HD" -> "zdfneo") und mit den Schlüsseln ohne Bindestriche verglichen.
+  // Passt nichts, werden hinten Wörter weggelassen ("WDR HD Köln" -> "wdr", "hr-fernsehen" -> "hr").
+
+  var LOGO_ALIAS = {
+    erste: 'das-erste', ardhd: 'das-erste',
+    pro7: 'pro-sieben', pro7maxx: 'pro-sieben-maxx',
+    rtl2: 'rtl-zwei', rtlnitro: 'nitro', superrtl: 'rtl-super', rtlsuper: 'rtl-super',
+    kabel1: 'kabel-eins', kabel1doku: 'kabel-eins-doku', kabel1classics: 'kabel-eins-classics',
+    servustv: 'servus-tv-deutchland', servustvdeutschland: 'servus-tv-deutchland',
+    euronews: 'euronews-deutsch', eurosport: 'eurosport-1', hse24: 'hse', qvc2: 'qvc-zwei',
+    ndrfshh: 'ndr-hamburg', ndrfsmv: 'ndr-mecklenburg-vorpommern', ndrfssh: 'ndr-schleswig-holstein',
+    mdrsachsenanhalt: 'mdr-sachsen-anhalt', mdrthuringen: 'mdr-thuringen',
+    welttv: 'welt', ntvhd: 'ntv', dmf: 'deutsches-musik-fernsehen'
+  };
+
+  var logoIndex = null;
+
+  function logoKeyFor(name) {
+    if (!logoIndex) {
+      logoIndex = {};
+      (window.KABELTV_LOGOS || []).forEach(function (k) { logoIndex[k.replace(/-/g, '')] = k; });
+    }
+    var words = String(name || '').toLowerCase()
+      .replace(/ä/g, 'a').replace(/ö/g, 'o').replace(/ü/g, 'u').replace(/ß/g, 'ss')
+      .replace(/\+/g, ' plus ')
+      .split(/[^a-z0-9]+/)
+      .filter(function (w) { return w && !/^(hd|sd|uhd|4k)$/.test(w); });
+    for (var n = words.length; n > 0; n--) {
+      var c = words.slice(0, n).join('');
+      if (LOGO_ALIAS[c]) return LOGO_ALIAS[c];
+      if (logoIndex[c]) return logoIndex[c];
+    }
+    return null;
+  }
+
+  // Hintergrund der Ladeanzeige: Senderlogo, ohne Logo der Sendername in groß
+  function setLoaderLogo(channelName) {
+    var img = $('status-logo');
+    var label = $('status-logo-name');
+    var key = channelName ? logoKeyFor(channelName) : null;
+    var fallback = function () {
+      show(img, false);
+      label.textContent = channelName || '';
+      show(label, !!channelName);
+    };
+    img.onload = null;
+    img.onerror = null;
+    if (!key) {
+      img.removeAttribute('src');
+      fallback();
+      return;
+    }
+    show(label, false);
+    img.onerror = fallback;
+    img.src = 'logos/' + key + '.png';
+    show(img, true);
+  }
+
+  function startLoader(text, step, channelName) {
+    loader.phase = 'starting';
+    loader.pct = 0;
+    loader.playingAt = 0;
+    loader.waitingAt = 0;
+    loader.lastTime = 0;
+    loader.lastMove = Date.now();
+    $('status-text').textContent = text;
+    setLoaderLogo(channelName);
+    $('status').classList.add('cover');
+    $('status').classList.remove('buffering');
+    $('status-bar').style.width = '0';
+    setLoaderBar(5, step);
+    show($('status'), true);
+  }
+
+  function showBuffering() {
+    loader.phase = 'buffering';
+    $('status-text').textContent = 'Lade nach …';
+    setLoaderStep('Datenstrom stockt, Puffer wird aufgefüllt');
+    $('status').classList.remove('cover');
+    $('status').classList.add('buffering');
+    show($('status'), true);
+  }
+
+  function loaderRunning() {
+    loader.phase = 'running';
+    loader.waitingAt = 0;
+    show($('status'), false);
+  }
+
+  // Zwischenschritte für den Balken; beim Start ist das echte Ende erst die laufende Zeit
+  video.addEventListener('loadstart', function () { if (loader.phase === 'starting') setLoaderBar(15, 'Stream wird angefordert'); });
+  video.addEventListener('loadedmetadata', function () { if (loader.phase === 'starting') setLoaderBar(40, 'Sender gefunden, Daten kommen an'); });
+  video.addEventListener('loadeddata', function () { if (loader.phase === 'starting') setLoaderBar(55, 'Erstes Bild empfangen'); });
+  video.addEventListener('canplay', function () { if (loader.phase === 'starting') setLoaderBar(65, 'Puffer wird gefüllt'); });
+  video.addEventListener('playing', function () {
+    if (loader.phase !== 'starting' || loader.playingAt) return;
+    loader.playingAt = Date.now();
+    loader.startTime = video.currentTime;
+    setLoaderBar(75, 'Wiedergabe startet');
+  });
+  video.addEventListener('waiting', function () {
+    if (loader.phase === 'running') loader.waitingAt = Date.now();
+  });
+
+  setInterval(function () {
+    if (loader.phase === 'idle') return;
+    var now = Date.now();
+    var t = video.currentTime;
+    var moved = t > loader.lastTime + 0.01;
+    loader.lastTime = t;
+    if (moved) loader.lastMove = now;
+
+    if (loader.phase === 'starting') {
+      if (!loader.playingAt) return;
+      var played = t - loader.startTime;
+      setLoaderBar(75 + Math.min(1, Math.max(0, played / START_HOLD)) * 25);
+      if (played >= START_HOLD || now - loader.playingAt > START_MAX) loaderRunning();
+    } else if (loader.phase === 'running') {
+      var stalled = now - loader.lastMove > STALL_MS ||
+        (loader.waitingAt && now - loader.waitingAt > 400 && now - loader.lastMove > 400);
+      if (stalled && state.view !== 'settings') showBuffering();
+    } else if (loader.phase === 'buffering') {
+      var quiet = Math.round((now - loader.lastMove) / 1000);
+      if (moved) loaderRunning();
+      else if (quiet >= 5) setLoaderStep('Seit ' + quiet + ' s keine Daten, Neustart nach ' + RECONNECT_MS / 1000 + ' s');
+      else if (now - loader.lastMove > RECONNECT_MS && state.channels[state.listId]) play(state.listId, state.index);
+    }
+  }, 250);
   function showError(title, text) {
     $('error-title').textContent = title;
     $('error-text').textContent = text;
@@ -513,15 +756,16 @@
     var cached = state.epgDetail[ch.url];
     if (cached) renderDetail(cached.events);
     else $('epg-events').innerHTML = '';
-    if (!proxyBase()) {
-      renderDetail(null, 'Programminfos gibt es nur mit Proxy.');
+    if (!epgSources().length) {
+      renderDetail(null, 'Keine Programminfos: Der Modus "Nur Proxy" braucht eine Proxy-Adresse.');
       return;
     }
     if (cached && Date.now() - cached.fetched < EPG_MAX_AGE) return;
     detailTimer = setTimeout(function () {
-      fetchText(proxyBase() + '/api/epg/channel/' + b64url(ch.url), 8000).then(function (t) {
-        var events = JSON.parse(t).events || [];
-        state.epgDetail[ch.url] = { events: events, fetched: Date.now() };
+      fetchEpg('/api/epg/channel/' + b64url(ch.url)).then(function (r) {
+        var events = r.events || [];
+        // leere Antwort nicht lange merken, der EPG kann gerade erst eingelesen werden
+        state.epgDetail[ch.url] = { events: events, fetched: events.length ? Date.now() : Date.now() - EPG_MAX_AGE + 20000 };
         var cur = (state.channels[state.overlayListId] || [])[state.overlayIndex];
         if (state.view === 'channels' && cur && cur.url === ch.url) renderDetail(events);
       }).catch(function () {
@@ -538,7 +782,9 @@
     if (!events.length) {
       var empty = document.createElement('div');
       empty.className = 'epg-empty';
-      empty.textContent = message || 'Keine Programminfos (der Proxy liest den EPG beim Start ein, das dauert ein paar Minuten).';
+      empty.textContent = message || (state.epgSource === 'service'
+        ? 'Noch keine Programminfos. Der Fernseher liest den EPG nach dem Start aus dem Kabelsignal ein, das dauert ein paar Minuten.'
+        : 'Keine Programminfos (der Proxy liest den EPG beim Start ein, das dauert ein paar Minuten).');
       box.appendChild(empty);
       return;
     }
@@ -694,6 +940,9 @@
     closeSettings();
     if (changed) {
       state.channels = {};
+      state.epg = {};
+      state.epgDetail = {};
+      state.epgProxyFailed = false;
       state.directFailed = false;
       save('directFailed.v3', false);
       start();
@@ -709,6 +958,7 @@
     } else if (el.id === 'btn-test') testConnection();
     else if (el.id === 'btn-save') saveSettings();
     else if (el.id === 'btn-cancel') closeSettings();
+    else if (el.id === 'btn-tutorial') openTutorial();
   }
 
   function settingsKey(code) {
@@ -760,6 +1010,84 @@
     el.addEventListener('click', function () { navIndex = i; updateNav(); activateNav(el); });
   });
 
+  // ---------- Anleitung ----------
+
+  var TUTORIAL = [
+    { title: 'Willkommen bei Kabel TV', rows: [
+      ['', 'Live-Fernsehen und Radio direkt von der FRITZ!Box – alles mit der normalen Fernbedienung.'],
+      ['', 'Die nächsten Seiten zeigen kurz, welche Taste was macht. Das Bild läuft im Hintergrund schon los.'],
+      ['&#9664; &#9654;', 'blättern, OK geht weiter, Zurück überspringt die Anleitung']
+    ] },
+    { title: 'Sender wechseln', rows: [
+      ['&#9650; &#9660; / CH+ CH−', 'nächster bzw. vorheriger Sender'],
+      ['0 – 9', 'Sendernummer direkt eingeben, nach kurzer Pause wird umgeschaltet (OK schaltet sofort)'],
+      ['<span class="key green"></span> Grün', 'zwischen den Listen HD, SD und Radio wechseln']
+    ] },
+    { title: 'Senderliste mit Programm', rows: [
+      ['OK / &#9664; &#9654;', 'Senderliste öffnen, rechts steht das Programm des gewählten Senders'],
+      ['&#9664; &#9654;', 'in der Liste: HD, SD oder Radio'],
+      ['&#9650; &#9660; / CH+ CH−', 'Sender auswählen, mit CH+/CH− in Zehnerschritten'],
+      ['OK', 'ausgewählten Sender abspielen, Zurück schließt die Liste']
+    ] },
+    { title: 'Infoleiste', rows: [
+      ['<span class="key yellow"></span> Gelb / Info', 'zeigt Sender, was gerade läuft und was danach kommt'],
+      ['DIREKT / PROXY', 'woher das Bild kommt: direkt von der FRITZ!Box oder über den Proxy'],
+      ['Tuner', 'wie viele Tuner der FRITZ!Box belegt bzw. frei sind (zählt auch andere Geräte mit)']
+    ] },
+    { title: 'Einstellungen', rows: [
+      ['<span class="key red"></span> Rot', 'Einstellungen öffnen: Adresse der FRITZ!Box und des Proxys'],
+      ['Wiedergabe', 'Automatisch (erst direkt, sonst Proxy), Nur direkt oder Nur Proxy'],
+      ['Anleitung', 'diese Anleitung jederzeit erneut anzeigen'],
+      ['Zurück', 'im Fernsehbild beendet die App']
+    ] }
+  ];
+
+  var tutorial = { open: false, page: 0 };
+
+  function openTutorial() {
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    tutorial.open = true;
+    tutorial.page = 0;
+    renderTutorial();
+    show($('tutorial'), true);
+  }
+
+  function closeTutorial() {
+    tutorial.open = false;
+    show($('tutorial'), false);
+    save('tutorialSeen', true);
+  }
+
+  function renderTutorial() {
+    var p = TUTORIAL[tutorial.page];
+    $('tut-step').textContent = 'Anleitung ' + (tutorial.page + 1) + ' / ' + TUTORIAL.length;
+    $('tut-title').textContent = p.title;
+    $('tut-body').innerHTML = p.rows.map(function (r) {
+      return '<div class="tut-row">' + (r[0] ? '<div class="tut-key">' + r[0] + '</div>' : '') +
+        '<div class="tut-text">' + r[1] + '</div></div>';
+    }).join('');
+    $('tut-ok').textContent = tutorial.page < TUTORIAL.length - 1 ? 'Weiter' : 'Fertig';
+    $('tut-dots').innerHTML = TUTORIAL.map(function (x, i) {
+      return '<span' + (i === tutorial.page ? ' class="active"' : '') + '></span>';
+    }).join('');
+  }
+
+  function tutorialKey(code) {
+    switch (code) {
+      case KEY.RIGHT: case KEY.OK:
+        if (tutorial.page < TUTORIAL.length - 1) { tutorial.page++; renderTutorial(); } else closeTutorial();
+        break;
+      case KEY.LEFT:
+        if (tutorial.page > 0) { tutorial.page--; renderTutorial(); }
+        break;
+      case KEY.BACK: case KEY.ESC: case KEY.BACKSPACE: closeTutorial(); break;
+      default: break; // übrige Tasten nicht ans Fernsehbild durchreichen
+    }
+    return true;
+  }
+
+  $('tutorial').addEventListener('click', function () { tutorialKey(KEY.OK); });
+
   // ---------- Tasten ----------
 
   function exitApp() {
@@ -798,7 +1126,8 @@
 
   document.addEventListener('keydown', function (e) {
     var handled;
-    if (state.view === 'settings') handled = settingsKey(e.keyCode);
+    if (tutorial.open) handled = tutorialKey(e.keyCode);
+    else if (state.view === 'settings') handled = settingsKey(e.keyCode);
     else if (state.view === 'channels') handled = channelsKey(e.keyCode);
     else handled = tvKey(e.keyCode);
     if (handled) e.preventDefault();
@@ -829,4 +1158,5 @@
 
   startTvService();
   start();
+  if (!load('tutorialSeen', false)) openTutorial();
 })();
