@@ -1,6 +1,6 @@
 {
   "name": "de.local.kabeltv.service",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Holt die RTSP-Streams der FRITZ!Box und reicht sie per HTTP an den Videoplayer weiter",
   "main": "service.js",
   "private": true

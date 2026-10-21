@@ -214,7 +214,8 @@ function decode6937(b) {
   for (let i = 0; i < b.length; i++) {
     const c = b[i];
     if (DIACRITICS[c] && i + 1 < b.length) {
-      s += (String.fromCharCode(b[++i]) + DIACRITICS[c]).normalize('NFC');
+      const ch = String.fromCharCode(b[++i]) + DIACRITICS[c];
+      try { s += ch.normalize('NFC'); } catch { s += ch; } // ohne ICU zeigt der Browser das Kombizeichen auch richtig
     } else if (c === 0xfb) {
       s += 'ß';
     } else {
@@ -342,7 +343,9 @@ function siUrl(channelUrl) {
   return channelUrl.replace(/pids=[^&]*/, `pids=${SI_PIDS}`);
 }
 
-async function scanMux(channelUrl, dwellMs, onEvents) {
+// Sammelt PAT, SDT und EIT aus den TS-Paketen einer Frequenz. Andere PIDs (Bild, Ton) werden übergangen,
+// damit das auch im laufenden Stream mitlesen kann.
+function muxCollector(onEvents) {
   const result = { tsid: null, onid: null, programs: new Map(), services: new Map(), stats: {} };
   const reader = new SectionReader((pid, s) => {
     const t = s[0];
@@ -360,9 +363,22 @@ async function scanMux(channelUrl, dwellMs, onEvents) {
       if (eit.events.length) onEvents(eit.key, eit.events);
     }
   });
-  const stream = await openStream(siUrl(channelUrl), (pkt, off) => reader.push(pkt, off));
-  await new Promise((r) => setTimeout(r, dwellMs));
-  await stream.close();
+  result.push = (pkt, off) => {
+    const pid = ((pkt[off + 1] & 0x1f) << 8) | pkt[off + 2];
+    if (pid === 0 || pid === 17 || pid === 18) reader.push(pkt, off);
+  };
+  return result;
+}
+
+// signal.wait(ms) darf die Wartezeit vorzeitig beenden (Scan abbrechen)
+async function scanMux(channelUrl, dwellMs, onEvents, signal) {
+  const result = muxCollector(onEvents);
+  const stream = await openStream(siUrl(channelUrl), result.push);
+  try {
+    await (signal ? signal.wait(dwellMs) : new Promise((r) => setTimeout(r, dwellMs)));
+  } finally {
+    await stream.close();
+  }
   return result;
 }
 
@@ -378,18 +394,46 @@ function pidsOf(url) {
   return m ? m[1].split(',').map(Number) : [];
 }
 
+function parseM3U(text) {
+  const out = [];
+  let name = null;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (line.startsWith('#EXTINF')) name = line.slice(line.indexOf(',') + 1).trim();
+    else if (!line.startsWith('#')) {
+      out.push({ name: name || line, url: line });
+      name = null;
+    }
+  }
+  return out;
+}
+
 const normalize = (s) => s.toLowerCase().replace(/[^a-z0-9äöüß]/g, '');
 
 class Epg {
-  constructor({ fetchAllChannels, dwellMs = 12000, intervalMs = 4 * 3600000, log = () => {} }) {
+  // horizonMs begrenzt, wie weit im Voraus Sendungen behalten werden (Speicher im Fernseher),
+  // canScan() kann den Scan einer Frequenz aufschieben, cacheFile hält das Ergebnis über Neustarts.
+  constructor({ fetchAllChannels, dwellMs = 12000, intervalMs = 4 * 3600000, horizonMs = 0, canScan = () => true, cacheFile = null, log = () => {} }) {
     this.fetchAllChannels = fetchAllChannels;
     this.dwellMs = dwellMs;
     this.intervalMs = intervalMs;
+    this.horizonMs = horizonMs;
+    this.canScan = canScan;
+    this.cacheFile = cacheFile;
     this.log = log;
     this.events = new Map();   // Dienst-Schlüssel -> Map(event_id -> Sendung)
     this.channelKey = new Map(); // RTSP-URL -> Dienst-Schlüssel
+    this.scannedAt = new Map();  // Frequenz -> Zeit des letzten vollständigen Lesens
+    this.channels = null;        // zuletzt geholte Senderliste (alle Listen)
     this.scanning = false;
+    this.scanDone = null;
+    this.cancelled = false;
+    this.wakeDwell = null;
     this.updated = null;
+    this.savedAt = 0;
+    this.saveTimer = null;
+    this.loadCache();
   }
 
   start(delayMs = 10000) {
@@ -398,24 +442,55 @@ class Epg {
   }
 
   addEvents(key, events) {
+    const limit = this.horizonMs ? Date.now() + this.horizonMs : Infinity;
     let m = this.events.get(key);
-    if (!m) this.events.set(key, (m = new Map()));
-    for (const e of events) m.set(e.id, e);
+    for (const e of events) {
+      if (e.start > limit) continue;
+      if (!m) this.events.set(key, (m = new Map()));
+      m.set(e.id, e);
+    }
   }
 
   prune() {
     const limit = Date.now() - 3600000;
-    for (const m of this.events.values()) {
+    for (const [key, m] of this.events) {
       for (const [id, e] of m) if (e.end < limit) m.delete(id);
+      if (!m.size) this.events.delete(key);
     }
   }
 
-  async scanAll() {
-    if (this.scanning) return;
+  async loadChannels(refresh) {
+    if (!this.channels || refresh) this.channels = await this.fetchAllChannels();
+    return this.channels;
+  }
+
+  // Bricht einen laufenden Scan ab und wartet, bis dessen Tuner wieder frei ist
+  cancelScan() {
+    if (!this.scanning) return Promise.resolve();
+    this.cancelled = true;
+    if (this.wakeDwell) this.wakeDwell();
+    return this.scanDone;
+  }
+
+  scanAll() {
+    if (this.scanning) return this.scanDone;
     this.scanning = true;
+    this.cancelled = false;
+    this.scanDone = this.runScan().finally(() => { this.scanning = false; });
+    return this.scanDone;
+  }
+
+  async runScan() {
     const t0 = Date.now();
+    const signal = {
+      wait: (ms) => new Promise((resolve) => {
+        const timer = setTimeout(resolve, ms);
+        this.wakeDwell = () => { clearTimeout(timer); resolve(); };
+      })
+    };
+    let read = 0;
     try {
-      const channels = await this.fetchAllChannels();
+      const channels = await this.loadChannels(true);
       const byFreq = new Map();
       for (const ch of channels) {
         const f = freqOf(ch.url);
@@ -424,22 +499,57 @@ class Epg {
         byFreq.get(f).push(ch);
       }
       for (const [freq, list] of byFreq) {
+        // Frequenzen, die gerade erst gelesen wurden (auch beim Zuschauen), auslassen
+        if (Date.now() - (this.scannedAt.get(freq) || 0) < this.intervalMs / 2) continue;
+        while (!this.cancelled && !this.canScan()) await signal.wait(2000);
+        if (this.cancelled) break;
         try {
-          const mux = await scanMux(list[0].url, this.dwellMs, (key, ev) => this.addEvents(key, ev));
+          const mux = await scanMux(list[0].url, this.dwellMs, (key, ev) => this.addEvents(key, ev), signal);
+          if (this.cancelled) break;
           this.mapChannels(mux, list);
+          this.scannedAt.set(freq, Date.now());
+          read++;
           this.log(`EPG: ${freq} MHz gelesen (${mux.services.size} Dienste)`);
         } catch (e) {
           this.log(`EPG: ${freq} MHz fehlgeschlagen: ${e.message}`);
         }
+        this.saveCache(false);
       }
       this.prune();
       this.updated = Date.now();
-      this.log(`EPG: Scan fertig in ${Math.round((Date.now() - t0) / 1000)} s, ${this.channelKey.size} Sender zugeordnet`);
+      this.log(`EPG: Scan ${this.cancelled ? 'abgebrochen' : 'fertig'} nach ${Math.round((Date.now() - t0) / 1000)} s, ${read} Frequenzen gelesen, ${this.channelKey.size} Sender zugeordnet`);
     } catch (e) {
       this.log(`EPG: Scan abgebrochen: ${e.message}`);
     } finally {
-      this.scanning = false;
+      this.wakeDwell = null;
+      this.saveCache(true);
     }
+  }
+
+  // Liest SI-Daten aus einem laufenden Stream mit (die FRITZ!Box schickt PAT/SDT/EIT meist mit).
+  // push(buf) bekommt die TS-Daten eines RTP-Pakets, finish() wird beim Ende des Streams aufgerufen.
+  watch(url) {
+    const freq = freqOf(url);
+    const t0 = Date.now();
+    const mux = muxCollector((key, ev) => this.addEvents(key, ev));
+    let mapped = false;
+    const map = (complete) => {
+      if (mux.tsid === null || mux.onid === null) return;
+      mapped = true;
+      this.loadChannels().then((channels) => {
+        this.mapChannels(mux, channels.filter((ch) => freqOf(ch.url) === freq));
+        if (complete) this.scannedAt.set(freq, Date.now());
+        this.updated = Date.now();
+        this.saveCache(false);
+      }).catch(() => {});
+    };
+    return {
+      push: (buf) => {
+        for (let off = 0; off + 188 <= buf.length; off += 188) if (buf[off] === 0x47) mux.push(buf, off);
+        if (!mapped && Date.now() - t0 > 5000) map(false);
+      },
+      finish: () => map(Date.now() - t0 >= this.dwellMs)
+    };
   }
 
   mapChannels(mux, channels) {
@@ -467,9 +577,53 @@ class Epg {
       .sort((a, b) => a.start - b.start)
       .slice(0, limit);
   }
+
+  loadCache() {
+    if (!this.cacheFile) return;
+    try {
+      const c = JSON.parse(require('fs').readFileSync(this.cacheFile, 'utf8'));
+      for (const [key, list] of c.events) this.addEvents(key, list);
+      this.channelKey = new Map(c.channelKey);
+      this.scannedAt = new Map(c.scannedAt);
+      this.updated = c.updated;
+      this.prune();
+      this.log(`EPG: Zwischenspeicher geladen (${this.channelKey.size} Sender)`);
+    } catch { /* noch keiner da */ }
+  }
+
+  cacheData() {
+    return JSON.stringify({
+      updated: this.updated,
+      channelKey: [...this.channelKey],
+      scannedAt: [...this.scannedAt],
+      events: [...this.events].map(([key, m]) => [key, [...m.values()]])
+    });
+  }
+
+  // Höchstens einmal pro Minute schreiben (sonst später nachholen), außer am Ende eines Scans
+  saveCache(force) {
+    if (!this.cacheFile) return;
+    const wait = 60000 - (Date.now() - this.savedAt);
+    if (!force && wait > 0) {
+      if (!this.saveTimer) this.saveTimer = setTimeout(() => this.saveCache(true), wait);
+      return;
+    }
+    clearTimeout(this.saveTimer);
+    this.saveTimer = null;
+    this.savedAt = Date.now();
+    require('fs').writeFile(this.cacheFile, this.cacheData(), (e) => {
+      if (e) this.log(`EPG: Zwischenspeicher nicht geschrieben: ${e.message}`);
+    });
+  }
+
+  // Beim Beenden des Prozesses, damit nichts verloren geht
+  saveCacheSync() {
+    if (!this.cacheFile) return;
+    try { require('fs').writeFileSync(this.cacheFile, this.cacheData()); } catch { /* egal */ }
+  }
 }
 
-module.exports = { Epg, scanMux, parseEit, dvbText, openStream, describeTuners };
+module.exports = { Epg, scanMux, parseEit, dvbText, openStream, describeTuners, parseM3U };
 
 // Test von der Kommandozeile: node epg.js <rtsp-url> [sekunden]
 if (require.main === module) {

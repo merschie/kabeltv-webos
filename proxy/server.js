@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const { spawn, spawnSync } = require('child_process');
-const { Epg, describeTuners } = require('./epg');
+const { Epg, describeTuners, parseM3U } = require('./epg');
 
 const PORT = Number(process.env.PORT) || 8095;
 const FRITZ_HOST = process.env.FRITZ_HOST || 'fritz.box';
@@ -43,21 +43,6 @@ function log(...args) {
 }
 
 // ---------- Playlists ----------
-
-function parseM3U(text) {
-  const out = [];
-  let name = null;
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.trim();
-    if (!line) continue;
-    if (line.startsWith('#EXTINF')) name = line.slice(line.indexOf(',') + 1).trim();
-    else if (!line.startsWith('#')) {
-      out.push({ name: name || line, url: line });
-      name = null;
-    }
-  }
-  return out;
-}
 
 async function fetchChannels(list) {
   const res = await fetch(`http://${FRITZ_HOST}/dvb/m3u/${list}.m3u`, { signal: AbortSignal.timeout(6000) });

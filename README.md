@@ -13,7 +13,7 @@ Der Videoplayer von webOS spielt kein RTSP. Deshalb bringt die App einen kleinen
 - **Nur direkt**: nur über den Stream-Dienst im Fernseher. Ist der Dienst nicht verfügbar, wird die RTSP-Adresse direkt versucht.
 - **Nur Proxy**: Der Docker-Container wandelt die Streams in HLS um. Das Bild bleibt unverändert, nur der Ton wird nach AAC gewandelt.
 
-Der Programmführer (EPG) kommt zurzeit noch vom Proxy.
+Den Programmführer (EPG) liest im Modus **Nur direkt** der Stream-Dienst im Fernseher selbst aus dem Kabelsignal, im Modus **Nur Proxy** kommt er vom Proxy. Im Modus **Automatisch** fragt die App zuerst den Proxy und nur, wenn der nicht antwortet, den Fernseher (siehe [EPG ohne Proxy](#epg-ohne-proxy)).
 
 ## Bedienung
 
@@ -61,7 +61,18 @@ Einstellungen über Umgebungsvariablen:
 
 ### Programmführer (EPG)
 
-Der Proxy liest das Programm direkt aus dem Kabelsignal (DVB-EIT), etwa eine Woche im Voraus. Dafür tunt er beim Start und danach alle 6 Stunden jede Frequenz für 15 Sekunden an, aber nur die Info-Datenströme, ohne Bild. Ein Durchlauf dauert rund 5 Minuten und belegt so lange einen Tuner. Die App zeigt das Programm in der Senderliste und in der Infoleiste. Ohne Proxy gibt es keinen EPG.
+Der Proxy liest das Programm direkt aus dem Kabelsignal (DVB-EIT), etwa eine Woche im Voraus. Dafür tunt er beim Start und danach alle 6 Stunden jede Frequenz für 15 Sekunden an, aber nur die Info-Datenströme, ohne Bild. Ein Durchlauf dauert rund 5 Minuten und belegt so lange einen Tuner. Die App zeigt das Programm in der Senderliste und in der Infoleiste.
+
+### EPG ohne Proxy
+
+Ohne Proxy liest der Stream-Dienst im Fernseher den EPG auf dieselbe Weise ein:
+
+- **Beim Zuschauen**: Die FRITZ!Box schickt die Info-Datenströme (PID 0, 17, 18) im Stream mit. Der Dienst liest sie nebenbei mit, das kostet keinen Tuner. So gibt es für alle Sender auf der Frequenz des laufenden Senders sofort Jetzt/Danach.
+- **Scan im Hintergrund**: Fragt die App das erste Mal nach Programminfos, tunt der Dienst nach 15 Sekunden nacheinander jede Frequenz für 12 Sekunden an (nur Info-Daten, ohne Bild), danach alle 6 Stunden. Frequenzen, die er gerade beim Zuschauen gelesen hat, lässt er aus. Ein Durchlauf belegt einige Minuten lang einen zweiten Tuner.
+- **Wiedergabe geht vor**: Während ein Sender startet, wartet der Scan. Sind alle Tuner belegt, bricht der Scan ab und gibt seinen Tuner frei, der Sender startet trotzdem. Nach 10 Minuten versucht er es erneut.
+- Der Dienst behält Sendungen für die nächsten 30 Stunden und sichert sie in `/tmp/kabeltv-epg.json`. Nach einem Neustart der App ist das Programm deshalb sofort wieder da, solange der Fernseher nicht neu gestartet wurde.
+
+Den Zustand zeigt `http://<TV-IP>:8096/status` (Abschnitt `epg` und Protokoll).
 
 `--network host` ist wichtig, weil die FRITZ!Box das Bild per RTP/UDP an den Container schickt.
 
@@ -93,7 +104,7 @@ ares-install --device tv dist/de.local.kabeltv_1.0.0_all.ipk
 
 Alternativ geht die Installation per Klick mit dem *webOS Dev Manager* (GitHub: webosbrew/dev-manager-desktop). Dort lässt sich die Dev-Mode-Session auch automatisch verlängern.
 
-App mit Stream-Dienst neu bauen (der Dienst nutzt den RTSP-Client aus `proxy/epg.js`):
+App mit Stream-Dienst neu bauen (der Dienst nutzt RTSP-Client und EPG-Leser aus `proxy/epg.js`):
 
 ```bash
 cp proxy/epg.js service/epg.js && ares-package webos-app service -o dist

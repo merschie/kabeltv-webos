@@ -1,6 +1,6 @@
 {
   "id": "de.local.kabeltv",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "vendor": "Fabian",
   "type": "web",
   "main": "index.html",

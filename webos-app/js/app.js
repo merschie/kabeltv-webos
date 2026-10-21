@@ -60,6 +60,8 @@
     playToken: 0,
     epg: {},               // listId -> { channels: {url: [jetzt, danach]}, fetched }
     epgDetail: {},         // url -> { events, fetched }
+    epgSource: null,       // 'proxy' | 'service': woher der EPG zuletzt kam
+    epgProxyFailed: false, // im Auto-Modus: Proxy liefert keinen EPG, Dienst im TV fragen
     view: 'tv',            // 'tv' | 'channels' | 'settings'
     overlayListId: null,
     overlayIndex: 0
@@ -162,15 +164,58 @@
     return Math.max(0, Math.min(1, p)) * 100;
   }
 
-  // ---------- Programmführer (kommt vom Proxy) ----------
+  // ---------- Programmführer ----------
+  // Kommt vom Proxy oder vom Stream-Dienst im Fernseher, der ihn selbst aus dem Kabelsignal liest.
 
   var EPG_MAX_AGE = 120000;
 
+  function serviceBase() {
+    return tvService.port ? 'http://127.0.0.1:' + tvService.port : '';
+  }
+
+  // Reihenfolge der EPG-Quellen: "Nur Proxy" fragt nur den Proxy, "Nur direkt" nur den Dienst,
+  // "Automatisch" erst den Proxy (dann braucht der Fernseher keinen eigenen Tuner dafür).
+  function epgSources() {
+    if (settings.mode === 'proxy') return proxyBase() ? ['proxy'] : [];
+    if (settings.mode === 'direct' || !proxyBase() || state.epgProxyFailed) return ['service'];
+    return ['proxy', 'service'];
+  }
+
+  function epgUrl(source, path) {
+    if (source === 'proxy') return proxyBase() + path;
+    var host = (settings.fritzHost || DEFAULTS.fritzHost).trim();
+    return serviceBase() + path + '?host=' + encodeURIComponent(host);
+  }
+
+  function fetchEpg(path) {
+    var sources = epgSources();
+    var attempt = function (i) {
+      if (i >= sources.length) return Promise.reject(new Error('keine EPG-Quelle'));
+      var source = sources[i];
+      var ready = source === 'service' ? waitForTvService(3000) : Promise.resolve();
+      return ready.then(function () {
+        if (source === 'service' && !serviceBase()) throw new Error('Stream-Dienst läuft nicht');
+        return fetchText(epgUrl(source, path), 8000);
+      }).then(function (t) {
+        state.epgSource = source;
+        return JSON.parse(t);
+      }).catch(function (e) {
+        if (source === 'proxy' && i + 1 < sources.length) state.epgProxyFailed = true;
+        if (i + 1 < sources.length) return attempt(i + 1);
+        throw e;
+      });
+    };
+    return attempt(0);
+  }
+
   function loadEpg(listId) {
     var cached = state.epg[listId];
-    if (!proxyBase() || (cached && Date.now() - cached.fetched < EPG_MAX_AGE)) return;
-    fetchText(proxyBase() + '/api/epg/' + listId, 8000).then(function (t) {
-      state.epg[listId] = { channels: JSON.parse(t).channels || {}, fetched: Date.now() };
+    if (!epgSources().length || (cached && Date.now() - cached.fetched < EPG_MAX_AGE)) return;
+    fetchEpg('/api/epg/' + listId).then(function (r) {
+      var channels = r.channels || {};
+      // Solange der Fernseher noch einliest, bald wieder nachfragen
+      var fetched = Object.keys(channels).length || !r.scanning ? Date.now() : Date.now() - EPG_MAX_AGE + 20000;
+      state.epg[listId] = { channels: channels, fetched: fetched, scanning: !!r.scanning };
       if (state.view === 'channels' && state.overlayListId === listId) refreshNowLines();
       if (listId === state.listId && !$('infobar').classList.contains('hidden')) renderInfoEpg();
     }).catch(function () { /* ohne EPG weiter */ });
@@ -650,15 +695,16 @@
     var cached = state.epgDetail[ch.url];
     if (cached) renderDetail(cached.events);
     else $('epg-events').innerHTML = '';
-    if (!proxyBase()) {
-      renderDetail(null, 'Programminfos gibt es nur mit Proxy.');
+    if (!epgSources().length) {
+      renderDetail(null, 'Keine Programminfos: Der Modus "Nur Proxy" braucht eine Proxy-Adresse.');
       return;
     }
     if (cached && Date.now() - cached.fetched < EPG_MAX_AGE) return;
     detailTimer = setTimeout(function () {
-      fetchText(proxyBase() + '/api/epg/channel/' + b64url(ch.url), 8000).then(function (t) {
-        var events = JSON.parse(t).events || [];
-        state.epgDetail[ch.url] = { events: events, fetched: Date.now() };
+      fetchEpg('/api/epg/channel/' + b64url(ch.url)).then(function (r) {
+        var events = r.events || [];
+        // leere Antwort nicht lange merken, der EPG kann gerade erst eingelesen werden
+        state.epgDetail[ch.url] = { events: events, fetched: events.length ? Date.now() : Date.now() - EPG_MAX_AGE + 20000 };
         var cur = (state.channels[state.overlayListId] || [])[state.overlayIndex];
         if (state.view === 'channels' && cur && cur.url === ch.url) renderDetail(events);
       }).catch(function () {
@@ -675,7 +721,9 @@
     if (!events.length) {
       var empty = document.createElement('div');
       empty.className = 'epg-empty';
-      empty.textContent = message || 'Keine Programminfos (der Proxy liest den EPG beim Start ein, das dauert ein paar Minuten).';
+      empty.textContent = message || (state.epgSource === 'service'
+        ? 'Noch keine Programminfos. Der Fernseher liest den EPG nach dem Start aus dem Kabelsignal ein, das dauert ein paar Minuten.'
+        : 'Keine Programminfos (der Proxy liest den EPG beim Start ein, das dauert ein paar Minuten).');
       box.appendChild(empty);
       return;
     }
@@ -831,6 +879,9 @@
     closeSettings();
     if (changed) {
       state.channels = {};
+      state.epg = {};
+      state.epgDetail = {};
+      state.epgProxyFailed = false;
       state.directFailed = false;
       save('directFailed.v3', false);
       start();
