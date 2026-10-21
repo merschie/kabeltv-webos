@@ -287,7 +287,7 @@
     setRadio(listId === 'radio' ? ch.name : null);
     loadEpg(listId);
     showInfo();
-    startLoader('Lade ' + ch.name + ' …');
+    startLoader(ch.name, 'Sender wird vorbereitet');
 
     var order = playbackOrder();
     if (!order.length) {
@@ -305,11 +305,16 @@
       }
       var via = order[i];
       state.via = via;
-      startLoader('Lade ' + ch.name + (via === 'proxy' ? ' über Proxy' : '') + ' …');
+      if (via === 'proxy') {
+        startLoader(ch.name + ' (Proxy)', i > 0 ? 'Direkt ging nicht, versuche den Proxy' : 'Proxy startet den Sender');
+      } else {
+        startLoader(ch.name, tvService.port ? 'Verbindung zur FRITZ!Box wird aufgebaut' : 'Stream-Dienst im Fernseher wird gestartet');
+      }
 
       var ready = via === 'direct' ? waitForTvService(3000) : Promise.resolve();
       ready.then(function () {
         if (token !== state.playToken) return false;
+        if (via === 'direct') setLoaderBar(10, 'Verbindung zur FRITZ!Box wird aufgebaut');
         var url = via === 'direct' ? directStreamUrl(ch.url) : proxyStreamUrl(ch.url);
         if (via === 'proxy') state.proxyStream = url;
         return tryPlay(url, via === 'direct' ? DIRECT_TIMEOUT : PROXY_TIMEOUT, token);
@@ -413,7 +418,7 @@
     $('radio-name').textContent = name || '';
   }
 
-  function showStatus(text) { startLoader(text); }
+  function showStatus(text) { startLoader(text, ''); }
   function hideStatus() {
     loader.phase = 'idle';
     show($('status'), false);
@@ -438,13 +443,19 @@
     waitingAt: 0
   };
 
-  function setLoaderBar(pct) {
+  function setLoaderBar(pct, step) {
     if (pct < loader.pct) return;
     loader.pct = pct;
     $('status-bar').style.width = pct + '%';
+    if (step !== undefined) setLoaderStep(step);
   }
 
-  function startLoader(text) {
+  function setLoaderStep(step) {
+    $('status-step').textContent = step;
+    show($('status-step'), !!step);
+  }
+
+  function startLoader(text, step) {
     loader.phase = 'starting';
     loader.pct = 0;
     loader.playingAt = 0;
@@ -455,13 +466,14 @@
     $('status').classList.add('cover');
     $('status').classList.remove('buffering');
     $('status-bar').style.width = '0';
-    setLoaderBar(5);
+    setLoaderBar(5, step);
     show($('status'), true);
   }
 
   function showBuffering() {
     loader.phase = 'buffering';
     $('status-text').textContent = 'Lade nach …';
+    setLoaderStep('Datenstrom stockt, Puffer wird aufgefüllt');
     $('status').classList.remove('cover');
     $('status').classList.add('buffering');
     show($('status'), true);
@@ -474,15 +486,15 @@
   }
 
   // Zwischenschritte für den Balken; beim Start ist das echte Ende erst die laufende Zeit
-  video.addEventListener('loadstart', function () { if (loader.phase === 'starting') setLoaderBar(15); });
-  video.addEventListener('loadedmetadata', function () { if (loader.phase === 'starting') setLoaderBar(40); });
-  video.addEventListener('loadeddata', function () { if (loader.phase === 'starting') setLoaderBar(55); });
-  video.addEventListener('canplay', function () { if (loader.phase === 'starting') setLoaderBar(65); });
+  video.addEventListener('loadstart', function () { if (loader.phase === 'starting') setLoaderBar(15, 'Stream wird angefordert'); });
+  video.addEventListener('loadedmetadata', function () { if (loader.phase === 'starting') setLoaderBar(40, 'Sender gefunden, Daten kommen an'); });
+  video.addEventListener('loadeddata', function () { if (loader.phase === 'starting') setLoaderBar(55, 'Erstes Bild empfangen'); });
+  video.addEventListener('canplay', function () { if (loader.phase === 'starting') setLoaderBar(65, 'Puffer wird gefüllt'); });
   video.addEventListener('playing', function () {
     if (loader.phase !== 'starting' || loader.playingAt) return;
     loader.playingAt = Date.now();
     loader.startTime = video.currentTime;
-    setLoaderBar(75);
+    setLoaderBar(75, 'Wiedergabe startet');
   });
   video.addEventListener('waiting', function () {
     if (loader.phase === 'running') loader.waitingAt = Date.now();
@@ -506,7 +518,9 @@
         (loader.waitingAt && now - loader.waitingAt > 400 && now - loader.lastMove > 400);
       if (stalled && state.view !== 'settings') showBuffering();
     } else if (loader.phase === 'buffering') {
+      var quiet = Math.round((now - loader.lastMove) / 1000);
       if (moved) loaderRunning();
+      else if (quiet >= 5) setLoaderStep('Seit ' + quiet + ' s keine Daten, Neustart nach ' + RECONNECT_MS / 1000 + ' s');
       else if (now - loader.lastMove > RECONNECT_MS && state.channels[state.listId]) play(state.listId, state.index);
     }
   }, 250);
