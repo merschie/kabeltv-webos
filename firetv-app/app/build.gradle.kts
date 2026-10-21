@@ -20,6 +20,17 @@ android {
         buildConfigField("String", "PROXY_URL", "\"http://192.168.177.80:8095\"")
     }
 
+    // Fester Debug-Schlüssel im Repo, damit CI-Builds und lokale Builds sich gegenseitig
+    // aktualisieren lassen, ohne die App vorher zu deinstallieren
+    signingConfigs {
+        getByName("debug") {
+            storeFile = rootProject.file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
