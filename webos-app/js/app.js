@@ -829,6 +829,12 @@
     show($('settings'), false);
   }
 
+  // Ohne Senderliste gibt es kein Fernsehbild, dahinter: dann zurück zum Hinweis
+  function cancelSettings() {
+    closeSettings();
+    if (!state.channels[state.listId]) openNoFritz();
+  }
+
   function renderLan() {
     var lan = document.querySelectorAll('#set-lan button');
     for (var j = 0; j < lan.length; j++) {
@@ -888,7 +894,7 @@
       renderLan();
     } else if (el.id === 'btn-test') testConnection();
     else if (el.id === 'btn-save') saveSettings();
-    else if (el.id === 'btn-cancel') closeSettings();
+    else if (el.id === 'btn-cancel') cancelSettings();
     else if (el.id === 'btn-tutorial') openTutorial();
     else if (el.id === 'btn-demo') startDemo();
   }
@@ -912,7 +918,7 @@
       case KEY.LEFT: if ((inSeg || inRow) && navEls[navIndex - 1] && navEls[navIndex - 1].parentNode === el.parentNode) { navIndex--; updateNav(); } break;
       case KEY.RIGHT: if ((inSeg || inRow) && navEls[navIndex + 1] && navEls[navIndex + 1].parentNode === el.parentNode) { navIndex++; updateNav(); } break;
       case KEY.OK: activateNav(el); break;
-      case KEY.BACK: case KEY.ESC: closeSettings(); break;
+      case KEY.BACK: case KEY.ESC: cancelSettings(); break;
       default: return false;
     }
     return true;
@@ -1020,6 +1026,54 @@
 
   $('tutorial').addEventListener('click', function () { tutorialKey(KEY.OK); });
 
+  // ---------- Hinweis ohne FRITZ!Box ----------
+
+  var nofritzIndex = 0;
+
+  function openNoFritz(detail) {
+    state.view = 'nofritz';
+    if (detail && /fetch|network/i.test(detail)) detail = 'keine Antwort';
+    $('nofritz-detail').textContent = 'Gesucht unter „' + (settings.fritzHost || DEFAULTS.fritzHost) + '“' + (detail ? ': ' + detail : '');
+    nofritzIndex = 0;
+    renderNoFritz();
+    show($('nofritz'), true);
+  }
+
+  function closeNoFritz() {
+    state.view = 'tv';
+    show($('nofritz'), false);
+  }
+
+  function renderNoFritz() {
+    var btns = document.querySelectorAll('#nofritz .nf-btn');
+    for (var i = 0; i < btns.length; i++) btns[i].classList.toggle('focused', i === nofritzIndex);
+  }
+
+  function noFritzAction(act) {
+    closeNoFritz();
+    if (act === 'demo') startDemo();
+    else if (act === 'settings') openSettings();
+    else start();
+  }
+
+  function noFritzKey(code) {
+    var btns = document.querySelectorAll('#nofritz .nf-btn');
+    switch (code) {
+      case KEY.LEFT: if (nofritzIndex > 0) nofritzIndex--; renderNoFritz(); break;
+      case KEY.RIGHT: if (nofritzIndex < btns.length - 1) nofritzIndex++; renderNoFritz(); break;
+      case KEY.OK: noFritzAction(btns[nofritzIndex].getAttribute('data-act')); break;
+      case KEY.RED: closeNoFritz(); openSettings(); break;
+      case KEY.BACK: case KEY.ESC: exitApp(); break;
+      default: return false;
+    }
+    return true;
+  }
+
+  $('nofritz').addEventListener('click', function (e) {
+    var act = e.target.getAttribute && e.target.getAttribute('data-act');
+    if (act) noFritzAction(act);
+  });
+
   // ---------- Tasten ----------
 
   function exitApp() {
@@ -1060,6 +1114,7 @@
     var handled;
     if (tutorial.open) handled = tutorialKey(e.keyCode);
     else if (state.view === 'settings') handled = settingsKey(e.keyCode);
+    else if (state.view === 'nofritz') handled = noFritzKey(e.keyCode);
     else if (state.view === 'channels') handled = channelsKey(e.keyCode);
     else handled = tvKey(e.keyCode);
     if (handled) e.preventDefault();
@@ -1083,8 +1138,7 @@
       play(listId, load('last.' + listId, 0));
     }).catch(function (e) {
       hideStatus();
-      openSettings('Senderliste konnte nicht geladen werden:\n' + e.message +
-        '\nBitte Adresse der FRITZ!Box prüfen. Ohne FRITZ!Box: „Demo ansehen“.', true);
+      openNoFritz(e.message);
     });
   }
 

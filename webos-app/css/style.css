@@ -334,3 +334,29 @@ html, body {
 #tut-dots span { width: 14px; height: 14px; border-radius: 50%; background: rgba(255, 255, 255, .2); }
 #tut-dots span.active { background: #4ea1ff; }
 .tut-hint { margin-top: 24px; font-size: 22px; color: #888; text-align: center; }
+
+/* Hinweis ohne FRITZ!Box */
+#nofritz {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, .85);
+}
+#nofritz h1 { margin: 0 0 24px; font-size: 52px; font-weight: normal; }
+#nofritz p { margin: 0 0 18px; line-height: 1.45; color: #ddd; }
+#nofritz-detail { font-size: 22px; color: #888 !important; }
+.nf-row { display: flex; gap: 20px; margin-top: 32px; }
+.nf-btn {
+  padding: 16px 32px;
+  font: inherit;
+  color: #ddd;
+  background: #1e2533;
+  border: 3px solid #333c4f;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.nf-btn.primary { background: #27ae60; color: #fff; border-color: #27ae60; }
+.nf-btn.focused { border-color: #4ea1ff; box-shadow: 0 0 0 3px rgba(78, 161, 255, .35); }
+.nf-btn.primary.focused { border-color: #fff; }

@@ -89,6 +89,22 @@
     <div id="settings-status"></div>
   </div>
 
+  <!-- Hinweis, wenn keine FRITZ!Box antwortet -->
+  <div id="nofritz" class="hidden">
+    <div class="tut-box">
+      <h1>Keine FRITZ!Box gefunden</h1>
+      <p>Kabel TV zeigt das Fernsehprogramm einer <b>FRITZ!Box Cable</b> im selben Heimnetz. In der FRITZ!Box muss unter <i>DVB-C</i> das Streaming eingeschaltet sein.</p>
+      <p>Ohne FRITZ!Box lässt sich die App mit Testbildern ausprobieren.</p>
+      <p id="nofritz-detail"></p>
+      <div class="nf-row">
+        <button class="nf-btn primary" data-act="demo">Demo ansehen</button>
+        <button class="nf-btn" data-act="settings">Einstellungen</button>
+        <button class="nf-btn" data-act="retry">Erneut versuchen</button>
+      </div>
+      <div class="tut-hint">&#9664;&#9654; Auswahl &nbsp; OK Bestätigen &nbsp; Zurück App beenden</div>
+    </div>
+  </div>
+
   <!-- Kurze Anleitung beim ersten Start -->
   <div id="tutorial" class="hidden">
     <div class="tut-box">
