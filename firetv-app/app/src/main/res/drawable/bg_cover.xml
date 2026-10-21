@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Deckt beim Senderwechsel Schwarzbild und Standbild ab -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient android:type="radial" android:centerY="0.4" android:gradientRadius="560dp"
+        android:startColor="#16213A" android:endColor="#000000" />
+</shape>

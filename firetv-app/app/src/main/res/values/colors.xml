@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Farben aus webos-app/css/style.css -->
+<resources>
+    <color name="text">#F2F2F2</color>
+    <color name="muted">#99AABB</color>
+    <color name="accent">#4EA1FF</color>
+    <color name="panel">#F20C101A</color>
+    <color name="selected">#2C5AA0</color>
+    <color name="ok">#2ECC71</color>
+    <color name="warn">#F1C40F</color>
+    <color name="bad">#E74C3C</color>
+    <color name="field">#1E2533</color>
+    <color name="field_border">#333C4F</color>
+</resources>

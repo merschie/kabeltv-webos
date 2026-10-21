@@ -1,16 +1,31 @@
 # Kabel TV für den Fire TV Stick
 
-Android-TV-App (Kotlin, Media3/ExoPlayer) für die Sender der FRITZ!Box 6660 Cable. Zurzeit ein erstes Gerüst: Die App lädt die HD-Senderliste direkt von der FRITZ!Box und spielt sie ab.
+Android-TV-App (Kotlin, Media3/ExoPlayer) für die Sender der FRITZ!Box 6660 Cable, mit denselben Funktionen wie die webOS-App: Listen HD, SD und Radio, Senderliste mit Programm, Ladeanzeige mit Senderlogo, Infoleiste mit Jetzt/Danach und Tuner-Anzeige, Einstellungen und Anleitung beim ersten Start.
 
-| Taste | Funktion |
-|---|---|
-| ▲ ▼ | Sender wechseln |
-| OK | Sendername einblenden |
-| ☰ (Menü) | zwischen **Direkt** (RTSP von der FRITZ!Box) und **Proxy** (HLS vom Unraid-Proxy) umschalten |
+## Bedienung
 
-Die Adressen stehen in `app/build.gradle.kts` (`FRITZ_HOST`, `PROXY_URL`).
+Die Fire-TV-Fernbedienung hat keine Farb- und Zifferntasten. Deshalb liegen deren Funktionen auf anderen Tasten:
 
-Die FRITZ!Box schickt MPEG-TS per RTP (Payload-Typ 33). Das kann der RTSP-Player von Media3 nicht. Im Modus *Direkt* holt deshalb `RtspTsDataSource` den Stream selbst (wie der webOS-Stream-Dienst), entfernt die RTP-Header und gibt das MPEG-TS an ExoPlayer weiter.
+| Taste | im TV-Bild | in der Senderliste |
+|---|---|---|
+| ▲ ▼ | Sender wechseln | Auswahl bewegen |
+| OK, ◀ ▶ | Senderliste öffnen | OK spielt ab, ◀ ▶ wechselt HD/SD/Radio |
+| ⏪ ⏩ | Liste wechseln (HD → SD → Radio) | 10 Sender springen |
+| ⏯ | Infoleiste mit Jetzt/Danach | – |
+| ☰ Menü | Einstellungen | Einstellungen |
+| Zurück | App beenden | Liste schließen |
+
+Fernbedienungen mit Zifferntasten, Farbtasten oder P+/P− funktionieren wie unter webOS.
+
+## Wiedergabe und Programmführer
+
+Die FRITZ!Box schickt MPEG-TS per RTP (Payload-Typ 33). Das kann der RTSP-Player von Media3 nicht. Im Modus *Direkt* holt deshalb `RtspSession` den Stream selbst (wie der webOS-Stream-Dienst), entfernt die RTP-Header und gibt das MPEG-TS über `RtspTsDataSource` an ExoPlayer weiter.
+
+- **Automatisch** (Standard): erst direkt, bei Problemen über den Proxy.
+- **Nur direkt**: nur direkt von der FRITZ!Box.
+- **Nur Proxy**: HLS vom Unraid-Proxy.
+
+Den EPG holt die App im Modus *Automatisch* zuerst vom Proxy. Antwortet der nicht (oder im Modus *Nur direkt*), liest sie ihn selbst aus dem Kabelsignal (`LocalEpg`, Kotlin-Fassung von `proxy/epg.js`): Sie tunt dafür jede Frequenz kurz an, belegt dabei einen Tuner und gibt ihn sofort ab, wenn ein Sender startet und alle Tuner belegt sind. Die Senderlogos kommen beim Bauen aus `webos-app/logos`.
 
 ## Entwicklungsumgebung unter Windows 11
 

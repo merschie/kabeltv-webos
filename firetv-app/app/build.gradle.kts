@@ -12,8 +12,8 @@ android {
         // Fire OS 5 (Fire TV Stick 1./2. Gen.) entspricht API 22
         minSdk = 22
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
 
         // Adressen im Heimnetz, lassen sich später in den Einstellungen ändern
         buildConfigField("String", "FRITZ_HOST", "\"192.168.177.1\"")
@@ -44,6 +44,9 @@ android {
         buildConfig = true
     }
 
+    // Senderlogos aus der webOS-App mitbenutzen statt sie doppelt im Repo zu halten
+    sourceSets["main"].assets.srcDir("build/generated/logos")
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -55,6 +58,12 @@ kotlin {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
+
+val copyLogos by tasks.registering(Sync::class) {
+    from(rootProject.file("../webos-app/logos"))
+    into("build/generated/logos/logos")
+}
+tasks.named("preBuild") { dependsOn(copyLogos) }
 
 dependencies {
     implementation(libs.androidx.core.ktx)

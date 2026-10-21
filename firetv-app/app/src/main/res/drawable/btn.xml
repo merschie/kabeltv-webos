@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- state_activated = gewählter Wiedergabemodus -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true" android:state_activated="true">
+        <shape>
+            <solid android:color="@color/selected" />
+            <stroke android:width="2dp" android:color="@color/accent" />
+            <corners android:radius="5dp" />
+        </shape>
+    </item>
+    <item android:state_focused="true">
+        <shape>
+            <solid android:color="@color/field" />
+            <stroke android:width="2dp" android:color="@color/accent" />
+            <corners android:radius="5dp" />
+        </shape>
+    </item>
+    <item android:state_activated="true">
+        <shape>
+            <solid android:color="@color/selected" />
+            <stroke android:width="2dp" android:color="@color/selected" />
+            <corners android:radius="5dp" />
+        </shape>
+    </item>
+    <item>
+        <shape>
+            <solid android:color="@color/field" />
+            <stroke android:width="2dp" android:color="@color/field_border" />
+            <corners android:radius="5dp" />
+        </shape>
+    </item>
+</selector>
