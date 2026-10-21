@@ -1,15 +1,15 @@
 'use strict';
 
 // Hintergrunddienst auf dem Fernseher: holt den RTSP-Stream der FRITZ!Box (RTP über UDP) und gibt das
-// MPEG-TS unverändert per HTTP aus. Damit spielt der webOS-Videoplayer die Sender ohne externen Proxy.
+// MPEG-TS unverändert per HTTP aus. Damit spielt der webOS-Videoplayer die Sender ohne weiteres Gerät.
 // Die App startet den Dienst per Luna-Aufruf "start" und hält ihn mit einem Abo am Leben.
-// Außerdem liest er den Programmführer (EPG) selbst, damit es ihn auch ohne Proxy gibt.
+// Außerdem liest er den Programmführer (EPG) selbst aus dem Kabelsignal.
 
 const http = require('http');
 const os = require('os');
 const path = require('path');
 const Service = require('webos-service');
-const { openStream, describeTuners, Epg, parseM3U } = require('./epg'); // beim Paketieren aus proxy/epg.js kopiert
+const { openStream, describeTuners, Epg, parseM3U } = require('./epg');
 
 const SERVICE_ID = 'de.local.kabeltv.service';
 const PORT = 8096;
@@ -94,7 +94,7 @@ const epg = new Epg({
 });
 
 // Der Scan belegt einen Tuner. Er startet erst, wenn die App zum ersten Mal Programminfos braucht
-// (also nicht, wenn der Proxy sie liefert), und lässt der Wiedergabe den Vortritt.
+// und lässt der Wiedergabe den Vortritt.
 function ensureEpg() {
   if (epgStarted) return;
   epgStarted = true;
@@ -193,7 +193,6 @@ function epgStatus() {
   return { started: epgStarted, scanning: epg.scanning, updated: epg.updated, channels: epg.channelKey.size };
 }
 
-// Gleiche Antworten wie /api/epg/... beim Proxy, damit die App beide gleich behandeln kann
 async function handleEpg(req, res, pathname, query) {
   const host = query.get('host');
   if (host) {

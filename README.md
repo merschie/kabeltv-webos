@@ -61,10 +61,10 @@ ares-install --device tv dist/de.local.kabeltv_1.0.0_all.ipk
 
 Alternativ geht die Installation per Klick mit dem *webOS Dev Manager* (GitHub: webosbrew/dev-manager-desktop). Dort lässt sich die Dev-Mode-Session auch automatisch verlängern.
 
-App mit Stream-Dienst neu bauen (der Dienst nutzt RTSP-Client und EPG-Leser aus `proxy/epg.js`, Rest des früheren Unraid-Proxys):
+App mit Stream-Dienst neu bauen:
 
 ```bash
-cp proxy/epg.js service/epg.js && ares-package webos-app service -o dist
+ares-package webos-app service -o dist
 ```
 
 ## Deploy in einem Schritt

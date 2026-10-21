@@ -34,7 +34,6 @@ Write-Host "== Kabel TV $($appinfo.version)"
 
 Write-Host '== App und Stream-Dienst paketieren'
 New-Item -ItemType Directory -Force dist | Out-Null
-Copy-Item proxy\epg.js service\epg.js -Force   # RTSP-Client teilen sich Proxy und Dienst
 Ares ares-package webos-app service -o dist
 
 foreach ($tv in $TvDevice) {
