@@ -46,6 +46,7 @@
     playToken: 0,
     epg: {},               // listId -> { channels: {url: [jetzt, danach]}, fetched }
     epgDetail: {},         // url -> { events, fetched }
+    demo: false,           // Demo-Modus ohne FRITZ!Box (Testbilder aus demo/)
     view: 'tv',            // 'tv' | 'channels' | 'settings'
     overlayListId: null,
     overlayIndex: 0
@@ -154,6 +155,57 @@
     return Math.max(0, Math.min(1, p)) * 100;
   }
 
+  // ---------- Demo-Modus ----------
+  // Für Geräte ohne FRITZ!Box (z. B. die Prüfer im LG Content Store): selbst erzeugte Testbilder
+  // und ein ausgedachter Programmführer, damit sich die ganze Bedienung ausprobieren lässt.
+
+  var DEMO_LISTS = {
+    tvhd: [
+      { name: 'Demo-Kanal 1', url: 'demo/demo1.mp4' },
+      { name: 'Demo-Kanal 2', url: 'demo/demo2.mp4' },
+      { name: 'Demo-Kanal 3', url: 'demo/demo3.mp4' }
+    ],
+    tvsd: [{ name: 'Demo-Kanal SD', url: 'demo/demo2.mp4' }],
+    radio: [{ name: 'Demo-Radio', url: 'demo/radio1.m4a' }]
+  };
+  var DEMO_SLOT = 30 * 60000;
+
+  function demoEvents(url, count) {
+    var n = 0;
+    for (var i = 0; i < url.length; i++) n += url.charCodeAt(i);
+    var first = Math.floor(Date.now() / DEMO_SLOT) * DEMO_SLOT;
+    var out = [];
+    for (var k = 0; k < count; k++) {
+      var no = (Math.floor(first / DEMO_SLOT) + k + n) % 9 + 1;
+      out.push({
+        start: first + k * DEMO_SLOT,
+        end: first + (k + 1) * DEMO_SLOT,
+        title: 'Demo-Sendung ' + no,
+        text: 'Beispieltext zur Demo-Sendung ' + no + '. Mit einer FRITZ!Box Cable steht hier das echte Programm aus dem Kabelsignal.'
+      });
+    }
+    return out;
+  }
+
+  function demoEpg(path) {
+    var m = path.match(/^\/api\/epg\/channel\/(.+)$/);
+    if (m) return { events: demoEvents(atob(m[1].replace(/-/g, '+').replace(/_/g, '/')), 8) };
+    var list = DEMO_LISTS[path.replace('/api/epg/', '')] || [];
+    var channels = {};
+    list.forEach(function (ch) { channels[ch.url] = demoEvents(ch.url, 2); });
+    return { channels: channels };
+  }
+
+  function startDemo() {
+    state.demo = true;
+    state.channels = {};
+    state.epg = {};
+    state.epgDetail = {};
+    state.listId = 'tvhd';
+    closeSettings();
+    start();
+  }
+
   // ---------- Programmführer ----------
   // Kommt vom Stream-Dienst im Fernseher, der ihn selbst aus dem Kabelsignal liest.
 
@@ -164,6 +216,7 @@
   }
 
   function fetchEpg(path) {
+    if (state.demo) return Promise.resolve(demoEpg(path));
     return waitForTvService(3000).then(function () {
       if (!serviceBase()) throw new Error('Stream-Dienst läuft nicht');
       var host = (settings.fritzHost || DEFAULTS.fritzHost).trim();
@@ -198,6 +251,7 @@
 
   function loadList(listId) {
     if (state.channels[listId]) return Promise.resolve(state.channels[listId]);
+    if (state.demo) return Promise.resolve(state.channels[listId] = DEMO_LISTS[listId]);
 
     var host = (settings.fritzHost || DEFAULTS.fritzHost).trim();
     return fetchText('http://' + host + '/dvb/m3u/' + listId + '.m3u').then(parseM3U).then(function (list) {
@@ -256,17 +310,25 @@
     var token = state.playToken;
     state.listId = listId;
     state.index = index;
-    save('listId', listId);
-    save('last.' + listId, index);
+    if (!state.demo) {
+      save('listId', listId);
+      save('last.' + listId, index);
+    }
 
     var ch = list[index];
     hideError();
     setRadio(listId === 'radio' ? ch.name : null);
     loadEpg(listId);
     showInfo();
-    startLoader(ch.name, tvService.port ? 'Verbindung zur FRITZ!Box wird aufgebaut' : 'Stream-Dienst im Fernseher wird gestartet', ch.name);
-    waitForTvService(3000).then(function () {
+    video.loop = state.demo;
+    if (state.demo) {
+      startLoader(ch.name, 'Demo wird gestartet', ch.name);
+    } else {
+      startLoader(ch.name, tvService.port ? 'Verbindung zur FRITZ!Box wird aufgebaut' : 'Stream-Dienst im Fernseher wird gestartet', ch.name);
+    }
+    (state.demo ? Promise.resolve() : waitForTvService(3000)).then(function () {
       if (token !== state.playToken) return false;
+      if (state.demo) return tryPlay(ch.url, DIRECT_TIMEOUT, token);
       setLoaderBar(10, 'Verbindung zur FRITZ!Box wird aufgebaut');
       return tryPlay(directStreamUrl(ch.url), DIRECT_TIMEOUT, token);
     }).then(function (ok) {
@@ -282,6 +344,7 @@
   }
 
   function failureHint() {
+    if (state.demo) return 'Das Demo-Video ließ sich nicht abspielen.\nRote Taste: Einstellungen';
     return 'Der Fernseher konnte den Sender nicht abspielen' +
       (tvService.port ? '' : ' (Stream-Dienst: ' + (tvService.error || 'nicht gestartet') + ')') + '.\n' +
       'Möglich: alle Tuner der FRITZ!Box belegt.\nRote Taste: Einstellungen';
@@ -299,6 +362,7 @@
 
   // Belegte/freie Tuner der FRITZ!Box (zählt auch andere Geräte mit), über den Dienst im TV
   function fetchTuners() {
+    if (state.demo) return Promise.reject(new Error('Demo'));
     if (!tvService.port) return Promise.reject(new Error('Stream-Dienst läuft nicht'));
     var host = (settings.fritzHost || DEFAULTS.fritzHost).trim();
     return fetchText('http://127.0.0.1:' + tvService.port + '/tuners?host=' + encodeURIComponent(host), 5000).then(JSON.parse);
@@ -321,6 +385,7 @@
     $('info-num').textContent = state.index + 1;
     $('info-name').textContent = ch.name;
     $('info-list').textContent = listLabel(state.listId);
+    show($('info-demo'), state.demo);
     $('info-clock').textContent = fmtTime(Date.now());
     renderInfoEpg();
     show($('infobar'), true);
@@ -801,7 +866,8 @@
 
   function saveSettings() {
     var d = readDraft();
-    var changed = d.fritzHost !== settings.fritzHost;
+    var changed = d.fritzHost !== settings.fritzHost || state.demo;
+    state.demo = false;
     if (d.lanStatus !== !!settings.lanStatus) setTvServiceLan(d.lanStatus);
     settings = d;
     save('settings', settings);
@@ -824,6 +890,7 @@
     else if (el.id === 'btn-save') saveSettings();
     else if (el.id === 'btn-cancel') closeSettings();
     else if (el.id === 'btn-tutorial') openTutorial();
+    else if (el.id === 'btn-demo') startDemo();
   }
 
   function settingsKey(code) {
@@ -902,6 +969,7 @@
       ['<span class="key red"></span> Rot', 'Einstellungen öffnen: Adresse der FRITZ!Box'],
       ['Statusseite', 'Stream-Dienst für die Fehlersuche aus dem Heimnetz erreichbar machen'],
       ['Anleitung', 'diese Anleitung jederzeit erneut anzeigen'],
+      ['Demo ansehen', 'Testbilder und Beispielprogramm ohne FRITZ!Box, Speichern beendet die Demo'],
       ['Zurück', 'im Fernsehbild beendet die App']
     ] }
   ];
@@ -1016,7 +1084,7 @@
     }).catch(function (e) {
       hideStatus();
       openSettings('Senderliste konnte nicht geladen werden:\n' + e.message +
-        '\nBitte Adresse der FRITZ!Box prüfen.', true);
+        '\nBitte Adresse der FRITZ!Box prüfen. Ohne FRITZ!Box: „Demo ansehen“.', true);
     });
   }
 

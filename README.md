@@ -75,6 +75,10 @@ ares-package webos-app service -o dist
 .\scripts\deploy.ps1
 ```
 
+## Demo-Modus
+
+Ohne FRITZ!Box (zum Beispiel für die Prüfer im LG Content Store) startet „Demo ansehen“ in den Einstellungen drei Test-Kanäle, einen SD-Kanal und ein Demo-Radio mit ausgedachtem Programmführer. Die Testbilder in `webos-app/demo/` sind selbst mit ffmpeg erzeugt (Testbild-Generatoren und Sinuston), es gibt also keine Lizenzfragen. Speichern in den Einstellungen beendet die Demo.
+
 ## Hinweise
 
 - Die FRITZ!Box liefert nur unverschlüsselte Sender, also keine privaten Sender in HD.
