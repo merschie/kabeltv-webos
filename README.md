@@ -123,3 +123,4 @@ cp proxy/epg.js service/epg.js && ares-package webos-app service -o dist
 - Die FRITZ!Box liefert nur unverschlüsselte Sender, also keine privaten Sender in HD.
 - Die Zahl der Tuner ist begrenzt. Sind alle belegt, etwa durch andere Geräte, startet kein weiterer Sender.
 - Geht die App in den Hintergrund, gibt sie den Tuner sofort frei.
+- Beim Senderwechsel zeigt die Ladeanzeige das Senderlogo im Hintergrund. Die Logos stammen aus [tv-logo/tv-logos](https://github.com/tv-logo/tv-logos) (Markenzeichen der jeweiligen Sender) und liegen in `webos-app/logos/`. Gibt es kein passendes Logo, steht dort der Sendername. Aktualisieren mit `scripts/update-logos.sh`.

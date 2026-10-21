@@ -332,7 +332,7 @@
     setRadio(listId === 'radio' ? ch.name : null);
     loadEpg(listId);
     showInfo();
-    startLoader(ch.name, 'Sender wird vorbereitet');
+    startLoader(ch.name, 'Sender wird vorbereitet', ch.name);
 
     var order = playbackOrder();
     if (!order.length) {
@@ -351,9 +351,9 @@
       var via = order[i];
       state.via = via;
       if (via === 'proxy') {
-        startLoader(ch.name + ' (Proxy)', i > 0 ? 'Direkt ging nicht, versuche den Proxy' : 'Proxy startet den Sender');
+        startLoader(ch.name + ' (Proxy)', i > 0 ? 'Direkt ging nicht, versuche den Proxy' : 'Proxy startet den Sender', ch.name);
       } else {
-        startLoader(ch.name, tvService.port ? 'Verbindung zur FRITZ!Box wird aufgebaut' : 'Stream-Dienst im Fernseher wird gestartet');
+        startLoader(ch.name, tvService.port ? 'Verbindung zur FRITZ!Box wird aufgebaut' : 'Stream-Dienst im Fernseher wird gestartet', ch.name);
       }
 
       var ready = via === 'direct' ? waitForTvService(3000) : Promise.resolve();
@@ -500,7 +500,67 @@
     show($('status-step'), !!step);
   }
 
-  function startLoader(text, step) {
+  // ---------- Senderlogos ----------
+  // Logos liegen in logos/<schlüssel>.png, die Liste steht in js/logos.js.
+  // Der Sendername wird vereinfacht ("ZDFneo HD" -> "zdfneo") und mit den Schlüsseln ohne Bindestriche verglichen.
+  // Passt nichts, werden hinten Wörter weggelassen ("WDR HD Köln" -> "wdr", "hr-fernsehen" -> "hr").
+
+  var LOGO_ALIAS = {
+    erste: 'das-erste', ardhd: 'das-erste',
+    pro7: 'pro-sieben', pro7maxx: 'pro-sieben-maxx',
+    rtl2: 'rtl-zwei', rtlnitro: 'nitro', superrtl: 'rtl-super', rtlsuper: 'rtl-super',
+    kabel1: 'kabel-eins', kabel1doku: 'kabel-eins-doku', kabel1classics: 'kabel-eins-classics',
+    servustv: 'servus-tv-deutchland', servustvdeutschland: 'servus-tv-deutchland',
+    euronews: 'euronews-deutsch', eurosport: 'eurosport-1', hse24: 'hse',
+    ndrfshh: 'ndr-hamburg', ndrfsmv: 'ndr-mecklenburg-vorpommern', ndrfssh: 'ndr-schleswig-holstein',
+    mdrsachsenanhalt: 'mdr-sachsen-anhalt', mdrthuringen: 'mdr-thuringen',
+    welttv: 'welt', ntvhd: 'ntv', dmf: 'deutsches-musik-fernsehen'
+  };
+
+  var logoIndex = null;
+
+  function logoKeyFor(name) {
+    if (!logoIndex) {
+      logoIndex = {};
+      (window.KABELTV_LOGOS || []).forEach(function (k) { logoIndex[k.replace(/-/g, '')] = k; });
+    }
+    var words = String(name || '').toLowerCase()
+      .replace(/ä/g, 'a').replace(/ö/g, 'o').replace(/ü/g, 'u').replace(/ß/g, 'ss')
+      .replace(/\+/g, ' plus ')
+      .split(/[^a-z0-9]+/)
+      .filter(function (w) { return w && !/^(hd|sd|uhd|4k)$/.test(w); });
+    for (var n = words.length; n > 0; n--) {
+      var c = words.slice(0, n).join('');
+      if (LOGO_ALIAS[c]) return LOGO_ALIAS[c];
+      if (logoIndex[c]) return logoIndex[c];
+    }
+    return null;
+  }
+
+  // Hintergrund der Ladeanzeige: Senderlogo, ohne Logo der Sendername in groß
+  function setLoaderLogo(channelName) {
+    var img = $('status-logo');
+    var label = $('status-logo-name');
+    var key = channelName ? logoKeyFor(channelName) : null;
+    var fallback = function () {
+      show(img, false);
+      label.textContent = channelName || '';
+      show(label, !!channelName);
+    };
+    img.onload = null;
+    img.onerror = null;
+    if (!key) {
+      img.removeAttribute('src');
+      fallback();
+      return;
+    }
+    show(label, false);
+    img.onerror = fallback;
+    img.src = 'logos/' + key + '.png';
+    show(img, true);
+  }
+
+  function startLoader(text, step, channelName) {
     loader.phase = 'starting';
     loader.pct = 0;
     loader.playingAt = 0;
@@ -508,6 +568,7 @@
     loader.lastTime = 0;
     loader.lastMove = Date.now();
     $('status-text').textContent = text;
+    setLoaderLogo(channelName);
     $('status').classList.add('cover');
     $('status').classList.remove('buffering');
     $('status-bar').style.width = '0';

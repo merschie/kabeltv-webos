@@ -45,7 +45,33 @@ html, body {
   pointer-events: none;
 }
 /* Beim Senderwechsel: Schwarzbild/Standbild ganz abdecken */
-#status.cover { background: #000; }
+#status.cover { background: radial-gradient(circle at 50% 40%, #16213a, #000 75%); }
+/* Senderlogo (sonst Sendername) groß im Hintergrund, Ladebox darunter */
+#status-bg {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 12%;
+  height: 52%;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+#status.cover #status-bg { display: flex; }
+#status.cover .status-box { margin-top: 560px; }
+#status-logo {
+  width: 900px;
+  height: 85%;
+  object-fit: contain;
+  opacity: .85;
+}
+#status-logo-name {
+  padding: 0 80px;
+  font-size: 120px;
+  font-weight: bold;
+  text-align: center;
+  color: rgba(255, 255, 255, .25);
+}
 .status-box {
   display: flex;
   flex-direction: column;
