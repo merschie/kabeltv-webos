@@ -72,7 +72,7 @@ Ohne Proxy liest der Stream-Dienst im Fernseher den EPG auf dieselbe Weise ein:
 - **Wiedergabe geht vor**: Während ein Sender startet, wartet der Scan. Sind alle Tuner belegt, bricht der Scan ab und gibt seinen Tuner frei, der Sender startet trotzdem. Nach 10 Minuten versucht er es erneut.
 - Der Dienst behält Sendungen für die nächsten 30 Stunden und sichert sie in `/tmp/kabeltv-epg.json`. Nach einem Neustart der App ist das Programm deshalb sofort wieder da, solange der Fernseher nicht neu gestartet wurde.
 
-Den Zustand zeigt `http://<TV-IP>:8096/status` (Abschnitt `epg` und Protokoll).
+Der Dienst ist standardmäßig nur im Fernseher selbst erreichbar (`127.0.0.1`). Für die Fehlersuche lässt sich in den Einstellungen „Statusseite im Heimnetz“ einschalten, dann zeigt `http://<TV-IP>:8096/status` den Zustand (Abschnitt `epg` und Protokoll).
 
 `--network host` ist wichtig, weil die FRITZ!Box das Bild per RTP/UDP an den Container schickt.
 

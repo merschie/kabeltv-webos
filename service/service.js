@@ -221,7 +221,7 @@ async function handleEpg(req, res, pathname, query) {
   return sendJson(res, 404, { error: 'unbekannt' });
 }
 
-const server = http.createServer((req, res) => {
+function handleRequest(req, res) {
   const [pathname, qs] = req.url.split('?');
   if (pathname === '/status') {
     sendJson(res, 200, { ok: true, node: process.version, streaming: current ? current.id : null, epg: epgStatus(), log: logLines });
@@ -254,14 +254,34 @@ const server = http.createServer((req, res) => {
     return;
   }
   handleStream(req, res, url);
-});
+}
 
-server.on('error', (e) => note(`HTTP-Server: ${e.message}`));
-server.listen(PORT, '0.0.0.0', () => note(`Dienst bereit auf Port ${PORT} (Node ${process.version})`));
+// Standard ist nur 127.0.0.1. Mit "lan" ist der Dienst (z. B. /status) auch aus dem Heimnetz erreichbar.
+let server = null;
+let lanAccess = null;
+
+function listen(lan) {
+  if (lan === lanAccess) return;
+  lanAccess = lan;
+  const old = server;
+  const host = lan ? '0.0.0.0' : '127.0.0.1';
+  server = http.createServer(handleRequest);
+  let retries = 5;
+  server.on('error', (e) => {
+    // Der alte Server gibt den Port erst kurz nach close() frei
+    if (e.code === 'EADDRINUSE' && retries-- > 0) { setTimeout(() => server.listen(PORT, host), 200); return; }
+    note(`HTTP-Server: ${e.message}`);
+  });
+  if (old) old.close(); // laufende Streams bleiben verbunden
+  server.listen(PORT, host, () => note(`Dienst bereit auf ${host}:${PORT} (Node ${process.version})`));
+}
+
+listen(false);
 
 // Mit {subscribe: true} aufgerufen bleibt der Dienst aktiv, solange die App läuft.
 service.register('start', (message) => {
-  message.respond({ returnValue: true, port: PORT, subscribed: !!message.isSubscription });
+  if (typeof message.payload.lan === 'boolean') listen(message.payload.lan);
+  message.respond({ returnValue: true, port: PORT, lan: lanAccess, subscribed: !!message.isSubscription });
 });
 
 service.register('status', (message) => {

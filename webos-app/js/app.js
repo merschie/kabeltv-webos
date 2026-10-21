@@ -22,7 +22,7 @@
 
   // ---------- Einstellungen ----------
 
-  var DEFAULTS = { fritzHost: 'fritz.box', proxyUrl: 'http://192.168.177.80:8095', mode: 'auto' };
+  var DEFAULTS = { fritzHost: 'fritz.box', proxyUrl: 'http://192.168.177.80:8095', mode: 'auto', lanStatus: false };
 
   function load(key, fallback) {
     try {
@@ -125,11 +125,21 @@
         } catch (e) { tvService.error = 'ungültige Antwort'; }
       };
       // Abo hält den Dienst am Leben, solange die App läuft
-      bridge.call(SERVICE_URI, JSON.stringify({ subscribe: true }));
+      bridge.call(SERVICE_URI, JSON.stringify({ subscribe: true, lan: !!settings.lanStatus }));
       tvService.bridge = bridge;
     } catch (e) {
       tvService.error = e.message;
     }
+  }
+
+  // Heimnetz-Zugriff auf den Dienst nachträglich umschalten (eigener Aufruf, das Abo bleibt bestehen)
+  function setTvServiceLan(lan) {
+    if (typeof window.PalmServiceBridge === 'undefined') return;
+    try {
+      var bridge = new window.PalmServiceBridge();
+      bridge.onservicecallback = function () {};
+      bridge.call(SERVICE_URI, JSON.stringify({ lan: lan }));
+    } catch (e) { /* ignorieren */ }
   }
 
   // Wartet kurz auf den Dienst, damit der erste Senderstart nicht an der Startreihenfolge scheitert
@@ -861,12 +871,14 @@
   var navEls = [];
   var navIndex = 0;
   var draftMode = 'auto';
+  var draftLan = false;
 
   function openSettings(message, bad) {
     state.view = 'settings';
     $('set-fritz').value = settings.fritzHost;
     $('set-proxy').value = settings.proxyUrl;
     draftMode = settings.mode;
+    draftLan = !!settings.lanStatus;
     renderMode();
     setSettingsStatus(message || '', bad);
     navEls = Array.prototype.slice.call(document.querySelectorAll('#settings .nav'));
@@ -886,6 +898,10 @@
     for (var i = 0; i < btns.length; i++) {
       btns[i].classList.toggle('active', btns[i].getAttribute('data-mode') === draftMode);
     }
+    var lan = document.querySelectorAll('#set-lan button');
+    for (var j = 0; j < lan.length; j++) {
+      lan[j].classList.toggle('active', (lan[j].getAttribute('data-lan') === 'on') === draftLan);
+    }
   }
 
   function updateNav() {
@@ -902,7 +918,8 @@
     return {
       fritzHost: $('set-fritz').value.trim() || DEFAULTS.fritzHost,
       proxyUrl: $('set-proxy').value.trim(),
-      mode: draftMode
+      mode: draftMode,
+      lanStatus: draftLan
     };
   }
 
@@ -935,6 +952,7 @@
   function saveSettings() {
     var d = readDraft();
     var changed = d.fritzHost !== settings.fritzHost || d.proxyUrl !== settings.proxyUrl || d.mode !== settings.mode;
+    if (d.lanStatus !== !!settings.lanStatus) setTvServiceLan(d.lanStatus);
     settings = d;
     save('settings', settings);
     closeSettings();
@@ -955,6 +973,9 @@
     } else if (el.hasAttribute('data-mode')) {
       draftMode = el.getAttribute('data-mode');
       renderMode();
+    } else if (el.hasAttribute('data-lan')) {
+      draftLan = el.getAttribute('data-lan') === 'on';
+      renderMode();
     } else if (el.id === 'btn-test') testConnection();
     else if (el.id === 'btn-save') saveSettings();
     else if (el.id === 'btn-cancel') closeSettings();
@@ -972,7 +993,7 @@
       }
     }
     var el = navEls[navIndex];
-    var inSeg = el && el.hasAttribute('data-mode');
+    var inSeg = el && el.parentNode.classList.contains('segmented');
     var inRow = el && el.parentNode.classList.contains('row');
     switch (code) {
       case KEY.UP: navIndex = prevGroupStart(); updateNav(); break;
