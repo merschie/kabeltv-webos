@@ -38,15 +38,46 @@ html, body {
 /* Laden */
 #status {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  inset: 0;
   display: flex;
   align-items: center;
-  gap: 24px;
+  justify-content: center;
+  pointer-events: none;
+}
+/* Beim Senderwechsel: Schwarzbild/Standbild ganz abdecken */
+#status.cover { background: #000; }
+.status-box {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 560px;
   padding: 24px 40px;
   background: rgba(0, 0, 0, .7);
   border-radius: 16px;
+}
+.status-row { display: flex; align-items: center; gap: 24px; }
+.loadbar {
+  position: relative;
+  height: 8px;
+  background: rgba(255, 255, 255, .15);
+  border-radius: 4px;
+  overflow: hidden;
+}
+#status-bar {
+  height: 100%;
+  width: 0;
+  background: #4ea1ff;
+  transition: width .3s ease-out;
+}
+/* Nachladen: Fortschritt unbekannt, daher laufender Balken */
+#status.buffering #status-bar {
+  width: 30% !important;
+  transition: none;
+  animation: loadbar-run 1.2s ease-in-out infinite;
+}
+@keyframes loadbar-run {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(340%); }
 }
 .spinner {
   width: 48px;

@@ -229,6 +229,7 @@
     video.removeAttribute('src');
     video.load();
     releaseProxy();
+    hideStatus();
   }
 
   // Spielt eine URL ab und meldet true, sobald Bild/Ton läuft, sonst false.
@@ -286,7 +287,7 @@
     setRadio(listId === 'radio' ? ch.name : null);
     loadEpg(listId);
     showInfo();
-    showStatus('Lade ' + ch.name + ' …');
+    startLoader('Lade ' + ch.name + ' …');
 
     var order = playbackOrder();
     if (!order.length) {
@@ -304,7 +305,7 @@
       }
       var via = order[i];
       state.via = via;
-      showStatus('Lade ' + ch.name + (via === 'proxy' ? ' über Proxy' : '') + ' …');
+      startLoader('Lade ' + ch.name + (via === 'proxy' ? ' über Proxy' : '') + ' …');
 
       var ready = via === 'direct' ? waitForTvService(3000) : Promise.resolve();
       ready.then(function () {
@@ -315,7 +316,7 @@
       }).then(function (ok) {
         if (token !== state.playToken) return;
         if (ok) {
-          hideStatus();
+          // Ladeanzeige verschwindet von selbst, sobald das Bild wirklich läuft
           showInfo();
           return;
         }
@@ -385,8 +386,103 @@
     $('radio-name').textContent = name || '';
   }
 
-  function showStatus(text) { $('status-text').textContent = text; show($('status'), true); }
-  function hideStatus() { show($('status'), false); }
+  function showStatus(text) { startLoader(text); }
+  function hideStatus() {
+    loader.phase = 'idle';
+    show($('status'), false);
+  }
+
+  // ---------- Ladeanzeige ----------
+  // Deckt beim Senderwechsel Schwarzbild und Standbild ab, bis die Zeit im Video wirklich läuft.
+  // Danach erscheint sie wieder, wenn die Wiedergabe hängt (Nachladen).
+
+  var START_HOLD = 0.6;      // Sekunden echter Wiedergabe, bevor die Abdeckung verschwindet
+  var START_MAX = 8000;      // spätestens dann weg, auch wenn die Zeit nicht weiterläuft
+  var STALL_MS = 1000;       // so lange ohne Fortschritt gilt als Hänger
+  var RECONNECT_MS = 20000;  // so lange hängend, dann Sender neu starten
+
+  var loader = {
+    phase: 'idle',           // 'idle' | 'starting' | 'running' | 'buffering'
+    pct: 0,
+    playingAt: 0,
+    startTime: 0,
+    lastTime: 0,
+    lastMove: 0,
+    waitingAt: 0
+  };
+
+  function setLoaderBar(pct) {
+    if (pct < loader.pct) return;
+    loader.pct = pct;
+    $('status-bar').style.width = pct + '%';
+  }
+
+  function startLoader(text) {
+    loader.phase = 'starting';
+    loader.pct = 0;
+    loader.playingAt = 0;
+    loader.waitingAt = 0;
+    loader.lastTime = 0;
+    loader.lastMove = Date.now();
+    $('status-text').textContent = text;
+    $('status').classList.add('cover');
+    $('status').classList.remove('buffering');
+    $('status-bar').style.width = '0';
+    setLoaderBar(5);
+    show($('status'), true);
+  }
+
+  function showBuffering() {
+    loader.phase = 'buffering';
+    $('status-text').textContent = 'Lade nach …';
+    $('status').classList.remove('cover');
+    $('status').classList.add('buffering');
+    show($('status'), true);
+  }
+
+  function loaderRunning() {
+    loader.phase = 'running';
+    loader.waitingAt = 0;
+    show($('status'), false);
+  }
+
+  // Zwischenschritte für den Balken; beim Start ist das echte Ende erst die laufende Zeit
+  video.addEventListener('loadstart', function () { if (loader.phase === 'starting') setLoaderBar(15); });
+  video.addEventListener('loadedmetadata', function () { if (loader.phase === 'starting') setLoaderBar(40); });
+  video.addEventListener('loadeddata', function () { if (loader.phase === 'starting') setLoaderBar(55); });
+  video.addEventListener('canplay', function () { if (loader.phase === 'starting') setLoaderBar(65); });
+  video.addEventListener('playing', function () {
+    if (loader.phase !== 'starting' || loader.playingAt) return;
+    loader.playingAt = Date.now();
+    loader.startTime = video.currentTime;
+    setLoaderBar(75);
+  });
+  video.addEventListener('waiting', function () {
+    if (loader.phase === 'running') loader.waitingAt = Date.now();
+  });
+
+  setInterval(function () {
+    if (loader.phase === 'idle') return;
+    var now = Date.now();
+    var t = video.currentTime;
+    var moved = t > loader.lastTime + 0.01;
+    loader.lastTime = t;
+    if (moved) loader.lastMove = now;
+
+    if (loader.phase === 'starting') {
+      if (!loader.playingAt) return;
+      var played = t - loader.startTime;
+      setLoaderBar(75 + Math.min(1, Math.max(0, played / START_HOLD)) * 25);
+      if (played >= START_HOLD || now - loader.playingAt > START_MAX) loaderRunning();
+    } else if (loader.phase === 'running') {
+      var stalled = now - loader.lastMove > STALL_MS ||
+        (loader.waitingAt && now - loader.waitingAt > 400 && now - loader.lastMove > 400);
+      if (stalled && state.view !== 'settings') showBuffering();
+    } else if (loader.phase === 'buffering') {
+      if (moved) loaderRunning();
+      else if (now - loader.lastMove > RECONNECT_MS && state.channels[state.listId]) play(state.listId, state.index);
+    }
+  }, 250);
   function showError(title, text) {
     $('error-title').textContent = title;
     $('error-text').textContent = text;
