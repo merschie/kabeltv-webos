@@ -173,7 +173,7 @@ class LocalEpg(
     }
 
     /** Liest die SI-Daten aus einem laufenden Stream mit (die FRITZ!Box schickt PAT/SDT/EIT meist mit). */
-    fun watch(url: String): RtspTsDataSource.Sniffer {
+    fun watch(url: String): Sniffer {
         val freq = Net.freqOf(url)
         val t0 = System.currentTimeMillis()
         val collector = Dvb.MuxCollector { key, ev -> addEvents(key, ev) }
@@ -191,7 +191,7 @@ class LocalEpg(
                 }
             }.start()
         }
-        return object : RtspTsDataSource.Sniffer {
+        return object : Sniffer {
             override fun push(buf: ByteArray, off: Int, len: Int) {
                 collector.pushPayload(buf, off, len)
                 if (!mapped && System.currentTimeMillis() - t0 > 5000) map(false)

@@ -10,6 +10,12 @@ import java.io.IOException
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.TimeUnit
 
+/** Liest die TS-Daten eines laufenden Streams mit (für den EPG). */
+interface Sniffer {
+    fun push(buf: ByteArray, off: Int, len: Int)
+    fun finish()
+}
+
 /**
  * Media3-RTSP kennt keinen RTP-Payload 33 (MPEG-TS). Diese DataSource holt den Stream über [RtspSession]
  * selbst und liefert das reine MPEG-TS an ProgressiveMediaSource/TsExtractor, wie der webOS-Stream-Dienst.
@@ -25,11 +31,6 @@ class RtspTsDataSource(private val hooks: Hooks) : BaseDataSource(/* isNetwork =
         fun onFirstData(url: String) {}
         /** Mitlesen der SI-Daten für den EPG */
         fun sniffer(url: String): Sniffer? = null
-    }
-
-    interface Sniffer {
-        fun push(buf: ByteArray, off: Int, len: Int)
-        fun finish()
     }
 
     class Factory(private val hooks: Hooks) : DataSource.Factory {
