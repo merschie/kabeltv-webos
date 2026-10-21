@@ -10,7 +10,7 @@ Android-TV-App (Kotlin, Media3/ExoPlayer) für die Sender der FRITZ!Box 6660 Cab
 
 Die Adressen stehen in `app/build.gradle.kts` (`FRITZ_HOST`, `PROXY_URL`).
 
-Offene Frage für die Wiedergabe: Die FRITZ!Box schickt MPEG-TS per RTP. Ob der RTSP-Client von Media3 das abspielt, zeigt der erste Test im Modus *Direkt*. Falls nicht, bleiben der Proxy (HLS) oder ein eigener RTSP-Client wie im webOS-Stream-Dienst.
+Die FRITZ!Box schickt MPEG-TS per RTP (Payload-Typ 33). Das kann der RTSP-Player von Media3 nicht. Im Modus *Direkt* holt deshalb `RtspTsDataSource` den Stream selbst (wie der webOS-Stream-Dienst), entfernt die RTP-Header und gibt das MPEG-TS an ExoPlayer weiter.
 
 ## Entwicklungsumgebung unter Windows 11
 

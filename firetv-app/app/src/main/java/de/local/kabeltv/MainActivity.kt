@@ -12,7 +12,12 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.ui.PlayerView
 import java.net.HttpURLConnection
 import java.net.URL
@@ -22,8 +27,9 @@ import kotlin.concurrent.thread
  * Erstes Gerüst: lädt die Senderliste der FRITZ!Box und spielt sie mit Media3 ab.
  *
  * ▲ ▼ wechseln den Sender, ☰ (Menü) schaltet zwischen "Direkt" (RTSP von der
- * FRITZ!Box) und "Proxy" (HLS vom Unraid-Proxy) um.
+ * FRITZ!Box über [RtspTsDataSource]) und "Proxy" (HLS vom Unraid-Proxy) um.
  */
+@UnstableApi
 class MainActivity : AppCompatActivity() {
 
     private data class Channel(val name: String, val url: String)
@@ -37,6 +43,12 @@ class MainActivity : AppCompatActivity() {
     private var channels: List<Channel> = emptyList()
     private var index = 0
     private var mode = Mode.DIRECT
+
+    // MPEG-TS direkt von der FRITZ!Box; Kabelsender haben nicht immer IDR-Frames
+    private val directSource = ProgressiveMediaSource.Factory(
+        RtspTsDataSource.Factory(),
+        DefaultExtractorsFactory().setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES)
+    )
 
     private val handler = Handler(Looper.getMainLooper())
     private val hideOsd = Runnable { osd.visibility = View.GONE }
@@ -52,7 +64,11 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
-        player = ExoPlayer.Builder(this).build().also { p ->
+        // Live-TV: früh starten statt lange vorzupuffern
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(2000, 20000, 1000, 2000)
+            .build()
+        player = ExoPlayer.Builder(this).setLoadControl(loadControl).build().also { p ->
             p.addListener(object : Player.Listener {
                 override fun onPlayerError(error: PlaybackException) {
                     showOsd("Fehler (${mode.label}): ${error.errorCodeName}\n${error.cause?.message ?: ""}", sticky = true)
@@ -132,17 +148,15 @@ class MainActivity : AppCompatActivity() {
     private fun play() {
         val p = player ?: return
         val ch = channels.getOrNull(index) ?: return
-        val item = when (mode) {
-            Mode.DIRECT -> MediaItem.Builder()
-                .setUri(ch.url)
-                .setMimeType(MimeTypes.APPLICATION_RTSP)
-                .build()
-            Mode.PROXY -> MediaItem.Builder()
-                .setUri("${BuildConfig.PROXY_URL}/hls/${b64url(ch.url)}/index.m3u8")
-                .setMimeType(MimeTypes.APPLICATION_M3U8)
-                .build()
+        when (mode) {
+            Mode.DIRECT -> p.setMediaSource(directSource.createMediaSource(MediaItem.fromUri(ch.url)))
+            Mode.PROXY -> p.setMediaItem(
+                MediaItem.Builder()
+                    .setUri("${BuildConfig.PROXY_URL}/hls/${b64url(ch.url)}/index.m3u8")
+                    .setMimeType(MimeTypes.APPLICATION_M3U8)
+                    .build()
+            )
         }
-        p.setMediaItem(item)
         p.prepare()
         p.playWhenReady = true
         showCurrent()
