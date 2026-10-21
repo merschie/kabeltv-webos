@@ -1127,6 +1127,8 @@ class MainActivity : AppCompatActivity() {
         ) return super.dispatchKeyEvent(event)
 
         if (screen == Screen.SETTINGS && !tutorialOpen) {
+            // Das Loslassen der Taste, mit der die Einstellungen geöffnet wurden, darf sie nicht gleich wieder schließen
+            if (event.action == KeyEvent.ACTION_UP && consumedKeys.remove(code)) return true
             // Im Formular übernimmt die normale Fokus-Steuerung, nur Zurück/Menü schließen
             if (code == KeyEvent.KEYCODE_BACK || code == KeyEvent.KEYCODE_MENU) {
                 if (event.action == KeyEvent.ACTION_UP) closeSettings()
