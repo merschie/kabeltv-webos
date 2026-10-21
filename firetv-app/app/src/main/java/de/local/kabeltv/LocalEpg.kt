@@ -6,7 +6,7 @@ import org.json.JSONObject
 import java.io.File
 
 /**
- * Programmführer ohne Proxy, wie die Klasse Epg in proxy/epg.js (im webOS-Stream-Dienst):
+ * Eigener Programmführer, wie die Klasse Epg in epg.js (im webOS-Stream-Dienst):
  * Jede Frequenz wird kurz getunt (nur PAT/SDT/EIT), dazu werden die SI-Daten des laufenden Senders mitgelesen.
  * Der Scan belegt einen Tuner und startet erst, wenn die App Programminfos von hier braucht.
  */

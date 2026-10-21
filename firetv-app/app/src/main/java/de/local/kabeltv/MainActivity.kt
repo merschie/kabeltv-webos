@@ -23,7 +23,6 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
-import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
@@ -34,8 +33,6 @@ import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.ui.PlayerView
-import org.json.JSONArray
-import org.json.JSONObject
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -44,7 +41,8 @@ import java.util.concurrent.Executors
 
 /**
  * Fire-TV-Fassung von webos-app/js/app.js: Senderlisten HD/SD/Radio, Wiedergabe direkt von der FRITZ!Box
- * (eigener RTSP-Client) oder über den Proxy, Ladeanzeige, Infoleiste mit EPG und Tunern, Einstellungen, Anleitung.
+ * (eigener RTSP-Client), Ladeanzeige, Infoleiste mit EPG und Tunern, Einstellungen, Anleitung.
+ * Den Programmführer liest die App selbst aus dem Kabelsignal ([LocalEpg]).
  *
  * Die Fire-TV-Fernbedienung hat keine Farb- und Zifferntasten, deshalb: ☰ Menü = Einstellungen (Rot),
  * ⏪ ⏩ = Liste wechseln (Grün), ⏯ = Infoleiste (Gelb). Die Originaltasten gelten zusätzlich.
@@ -56,7 +54,7 @@ class MainActivity : AppCompatActivity() {
 
     private class EpgList(val channels: Map<String, List<EpgEvent>>, val fetched: Long, val scanning: Boolean)
     private class EpgDetail(val events: List<EpgEvent>, val fetched: Long)
-    private class Settings(val fritzHost: String, val proxyUrl: String, val mode: String)
+    private class Settings(val fritzHost: String)
 
     private enum class Screen { TV, CHANNELS, SETTINGS }
     private enum class Phase { IDLE, STARTING, RUNNING, BUFFERING }
@@ -64,7 +62,6 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private val LISTS = listOf(ListDef("tvhd", "HD"), ListDef("tvsd", "SD"), ListDef("radio", "Radio"))
         private const val DIRECT_TIMEOUT = 10000L
-        private const val PROXY_TIMEOUT = 25000L
         private const val EPG_MAX_AGE = 120000L
 
         private const val START_HOLD = 600L      // ms echter Wiedergabe, bevor die Abdeckung verschwindet
@@ -88,19 +85,15 @@ class MainActivity : AppCompatActivity() {
     private var listId = "tvhd"
     private val channels = HashMap<String, List<Channel>>()
     private var index = 0
-    private var via: String? = null              // "direct" | "proxy"
-    private var proxyStream: String? = null      // aktuell genutzte Proxy-URL zum Freigeben
     private var playToken = 0
     private var lastError: String? = null
     private val epg = HashMap<String, EpgList>()
     private val epgDetail = HashMap<String, EpgDetail>()
-    private var epgSource: String? = null        // "proxy" | "local"
-    @Volatile private var epgProxyFailed = false
     private var screen = Screen.TV
     private var overlayListId = "tvhd"
     private var overlayIndex = 0
 
-    private class Attempt(val token: Int, val via: String) { var done = false }
+    private class Attempt(val token: Int) { var done = false }
     private var attempt: Attempt? = null
     @Volatile private var startingPlayback = false
 
@@ -124,7 +117,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var infoNum: TextView
     private lateinit var infoName: TextView
     private lateinit var infoList: TextView
-    private lateinit var infoVia: TextView
     private lateinit var infoTuners: TextView
     private lateinit var infoClock: TextView
     private lateinit var infoEpg: View
@@ -140,8 +132,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var epgEvents: LinearLayout
     private lateinit var settingsPanel: View
     private lateinit var setFritz: EditText
-    private lateinit var setProxy: EditText
-    private lateinit var modeButtons: Map<String, Button>
+    private lateinit var btnTest: Button
     private lateinit var settingsStatus: TextView
     private lateinit var tutorialView: View
     private lateinit var tutStep: TextView
@@ -165,11 +156,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         prefs = getSharedPreferences("kabeltv", MODE_PRIVATE)
-        settings = Settings(
-            prefs.getString("fritzHost", null) ?: BuildConfig.FRITZ_HOST,
-            prefs.getString("proxyUrl", null) ?: BuildConfig.PROXY_URL,
-            prefs.getString("mode", null) ?: "auto"
-        )
+        settings = Settings(prefs.getString("fritzHost", null) ?: BuildConfig.FRITZ_HOST)
         listId = prefs.getString("listId", null) ?: "tvhd"
         logos = Logos(this)
         localEpg = LocalEpg(File(cacheDir, "epg.json"), ::fetchAllChannels) { !startingPlayback }
@@ -224,7 +211,6 @@ class MainActivity : AppCompatActivity() {
         infoNum = findViewById(R.id.info_num)
         infoName = findViewById(R.id.info_name)
         infoList = findViewById(R.id.info_list)
-        infoVia = findViewById(R.id.info_via)
         infoTuners = findViewById(R.id.info_tuners)
         infoClock = findViewById(R.id.info_clock)
         infoEpg = findViewById(R.id.info_epg)
@@ -240,12 +226,7 @@ class MainActivity : AppCompatActivity() {
         epgEvents = findViewById(R.id.epg_events)
         settingsPanel = findViewById(R.id.settings)
         setFritz = findViewById(R.id.set_fritz)
-        setProxy = findViewById(R.id.set_proxy)
-        modeButtons = mapOf(
-            "auto" to findViewById(R.id.mode_auto),
-            "direct" to findViewById(R.id.mode_direct),
-            "proxy" to findViewById(R.id.mode_proxy)
-        )
+        btnTest = findViewById(R.id.btn_test)
         settingsStatus = findViewById(R.id.settings_status)
         tutorialView = findViewById(R.id.tutorial)
         tutStep = findViewById(R.id.tut_step)
@@ -260,8 +241,7 @@ class MainActivity : AppCompatActivity() {
             closeChannels()
             play(overlayListId, position)
         }
-        for ((mode, b) in modeButtons) b.setOnClickListener { draftMode = mode; renderMode() }
-        findViewById<Button>(R.id.btn_test).setOnClickListener { testConnection() }
+        btnTest.setOnClickListener { testConnection() }
         findViewById<Button>(R.id.btn_save).setOnClickListener { saveSettings() }
         findViewById<Button>(R.id.btn_cancel).setOnClickListener { closeSettings() }
         findViewById<Button>(R.id.btn_tutorial).setOnClickListener { openTutorial() }
@@ -270,15 +250,7 @@ class MainActivity : AppCompatActivity() {
 
     // ---------- Hilfsfunktionen ----------
 
-    private fun proxyBase(): String {
-        var p = settings.proxyUrl.trim().trimEnd('/')
-        if (p.isNotEmpty() && !p.startsWith("http://") && !p.startsWith("https://")) p = "http://$p"
-        return p
-    }
-
     private fun fritzHost() = settings.fritzHost.trim().ifEmpty { BuildConfig.FRITZ_HOST }
-
-    private fun proxyStreamUrl(rtspUrl: String) = "${proxyBase()}/hls/${Net.b64url(rtspUrl)}/index.m3u8"
 
     private fun listLabel(id: String) = LISTS.firstOrNull { it.id == id }?.label ?: id
 
@@ -317,67 +289,23 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ---------- Programmführer ----------
-    // Kommt vom Proxy oder aus dem eigenen EPG-Leser, der das Kabelsignal selbst auswertet.
-
-    // "Nur Proxy" fragt nur den Proxy, "Nur direkt" nur die App, "Automatisch" erst den Proxy
-    // (dann braucht die App keinen eigenen Tuner dafür).
-    private fun epgSources(): List<String> {
-        if (settings.mode == "proxy") return if (proxyBase().isNotEmpty()) listOf("proxy") else emptyList()
-        if (settings.mode == "direct" || proxyBase().isEmpty() || epgProxyFailed) return listOf("local")
-        return listOf("proxy", "local")
-    }
-
-    private fun parseEvents(arr: JSONArray?): List<EpgEvent> {
-        if (arr == null) return emptyList()
-        return (0 until arr.length()).mapNotNull { i ->
-            val e = arr.optJSONObject(i) ?: return@mapNotNull null
-            EpgEvent(0, e.getLong("start"), e.getLong("end"), e.optString("title"), e.optString("text"))
-        }
-    }
-
-    /** Probiert die Quellen der Reihe nach; liefert Ergebnis und Quelle. */
-    private fun <T> fromEpgSources(proxy: () -> T, local: () -> T): Pair<T, String> {
-        val sources = epgSources()
-        if (sources.isEmpty()) throw IllegalStateException("keine EPG-Quelle")
-        var last: Exception? = null
-        for ((i, source) in sources.withIndex()) {
-            try {
-                return (if (source == "proxy") proxy() else local()) to source
-            } catch (e: Exception) {
-                if (source == "proxy" && i + 1 < sources.size) epgProxyFailed = true
-                last = e
-            }
-        }
-        throw last ?: IllegalStateException("keine EPG-Quelle")
-    }
+    // Der eigene EPG-Leser wertet das Kabelsignal selbst aus. Der Hintergrund-Scan startet erst,
+    // wenn Programminfos gebraucht werden, und belegt dann einen Tuner.
 
     private fun loadEpg(id: String) {
         val cached = epg[id]
-        if (epgSources().isEmpty() || (cached != null && System.currentTimeMillis() - cached.fetched < EPG_MAX_AGE)) return
+        if (cached != null && System.currentTimeMillis() - cached.fetched < EPG_MAX_AGE) return
         val list = channels[id] ?: return
         background({
-            fromEpgSources(
-                proxy = {
-                    val r = JSONObject(Net.fetchText("${proxyBase()}/api/epg/$id", 8000))
-                    val obj = r.optJSONObject("channels") ?: JSONObject()
-                    val map = HashMap<String, List<EpgEvent>>()
-                    for (k in obj.keys()) map[k] = parseEvents(obj.optJSONArray(k))
-                    map to r.optBoolean("scanning")
-                },
-                local = {
-                    localEpg.ensureStarted()
-                    val map = HashMap<String, List<EpgEvent>>()
-                    for (ch in list) {
-                        val ev = localEpg.upcoming(ch.url, 2)
-                        if (ev.isNotEmpty()) map[ch.url] = ev
-                    }
-                    map to (localEpg.scanning || localEpg.updated == null)
-                }
-            )
+            localEpg.ensureStarted()
+            val map = HashMap<String, List<EpgEvent>>()
+            for (ch in list) {
+                val ev = localEpg.upcoming(ch.url, 2)
+                if (ev.isNotEmpty()) map[ch.url] = ev
+            }
+            map to (localEpg.scanning || localEpg.updated == null)
         }) { r ->
-            val (data, source) = r.getOrNull() ?: return@background
-            epgSource = source
-            val (map, scanning) = data
+            val (map, scanning) = r.getOrNull() ?: return@background
             // Solange noch eingelesen wird, bald wieder nachfragen
             val now = System.currentTimeMillis()
             val fetched = if (map.isNotEmpty() || !scanning) now else now - EPG_MAX_AGE + 20000
@@ -399,17 +327,7 @@ class MainActivity : AppCompatActivity() {
     // ---------- Senderlisten ----------
 
     private fun fetchList(id: String): List<Channel> {
-        val direct = { Net.parseM3u(Net.fetchText("http://${fritzHost()}/dvb/m3u/$id.m3u")) }
-        val viaProxy = {
-            if (proxyBase().isEmpty()) throw IllegalStateException("Kein Proxy eingetragen")
-            val arr = JSONArray(Net.fetchText("${proxyBase()}/api/channels/$id"))
-            (0 until arr.length()).map { arr.getJSONObject(it).let { o -> Channel(o.getString("name"), o.getString("url")) } }
-        }
-        val list = when {
-            settings.mode == "proxy" -> viaProxy()
-            settings.mode == "direct" || proxyBase().isEmpty() -> direct()
-            else -> runCatching(direct).getOrElse { viaProxy() }
-        }
+        val list = Net.parseM3u(Net.fetchText("http://${fritzHost()}/dvb/m3u/$id.m3u"))
         if (list.isEmpty()) throw IllegalStateException("Senderliste ist leer")
         return list
     }
@@ -472,30 +390,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun releaseProxy() {
-        val url = proxyStream ?: return
-        proxyStream = null
-        io.execute { runCatching { Net.fetchText(url.replace(Regex("/index\\.m3u8$"), "/release"), 3000, "POST") } }
-    }
-
     private fun stopPlayback() {
         playToken++
         attempt = null
         startingPlayback = false
         player?.stop()
         player?.clearMediaItems()
-        releaseProxy()
         hideStatus()
-    }
-
-    private fun playbackOrder(): List<String> {
-        val hasProxy = proxyBase().isNotEmpty()
-        return when {
-            settings.mode == "direct" -> listOf("direct")
-            settings.mode == "proxy" -> if (hasProxy) listOf("proxy") else emptyList()
-            !hasProxy -> listOf("direct")
-            else -> listOf("direct", "proxy")
-        }
     }
 
     private fun play(id: String, i: Int) {
@@ -517,33 +418,11 @@ class MainActivity : AppCompatActivity() {
         startLoader(ch.name, "Sender wird vorbereitet", ch.name)
         if (player == null) return
 
-        val order = playbackOrder()
-        if (order.isEmpty()) {
-            hideStatus()
-            showError("Kein Proxy eingetragen", "Der Modus \"Nur Proxy\" braucht eine Proxy-Adresse.\nMenütaste ☰: Einstellungen")
-            return
-        }
         lastError = null
-        step(token, ch, order, 0)
-    }
-
-    private fun step(token: Int, ch: Channel, order: List<String>, i: Int) {
-        if (token != playToken) return
-        if (i >= order.size) {
-            hideStatus()
-            showError("Wiedergabe fehlgeschlagen", failureHint())
-            return
-        }
-        val v = order[i]
-        via = v
-        if (v == "proxy") {
-            startLoader("${ch.name} (Proxy)", if (i > 0) "Direkt ging nicht, versuche den Proxy" else "Proxy startet den Sender", ch.name)
-        } else {
-            startLoader(ch.name, "Verbindung zur FRITZ!Box wird aufgebaut", ch.name)
-        }
+        startLoader(ch.name, "Verbindung zur FRITZ!Box wird aufgebaut", ch.name)
         startingPlayback = true
 
-        val a = Attempt(token, v)
+        val a = Attempt(token)
         attempt = a
         onAttemptDone = { ok ->
             if (token == playToken) {
@@ -551,8 +430,8 @@ class MainActivity : AppCompatActivity() {
                     // Ladeanzeige verschwindet von selbst, sobald das Bild wirklich läuft
                     showInfo()
                 } else {
-                    if (v == "proxy") releaseProxy()
-                    step(token, ch, order, i + 1)
+                    hideStatus()
+                    showError("Wiedergabe fehlgeschlagen", failureHint())
                 }
             }
         }
@@ -561,20 +440,14 @@ class MainActivity : AppCompatActivity() {
                 lastError = "Zeitüberschreitung"
                 finishAttempt(false)
             }
-        }, if (v == "direct") DIRECT_TIMEOUT else PROXY_TIMEOUT)
+        }, DIRECT_TIMEOUT)
 
         val p = player ?: return
         p.stop()
-        if (v == "direct") {
-            p.setMediaSource(directSource.createMediaSource(MediaItem.fromUri(ch.url)))
-        } else {
-            val url = proxyStreamUrl(ch.url)
-            proxyStream = url
-            p.setMediaItem(MediaItem.Builder().setUri(url).setMimeType(MimeTypes.APPLICATION_M3U8).build())
-        }
+        p.setMediaSource(directSource.createMediaSource(MediaItem.fromUri(ch.url)))
         p.prepare()
         p.playWhenReady = true
-        setLoaderBar(15, if (v == "direct") "Stream wird bei der FRITZ!Box angefordert" else "Stream wird angefordert")
+        setLoaderBar(15, "Stream wird bei der FRITZ!Box angefordert")
     }
 
     private var onAttemptDone: ((Boolean) -> Unit)? = null
@@ -591,13 +464,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun failureHint(): String {
         val detail = lastError?.let { "\n($it)" } ?: ""
-        if (settings.mode == "direct" || proxyBase().isEmpty()) {
-            return "Die App konnte den Stream nicht direkt von der FRITZ!Box abspielen.$detail\n" +
-                "Möglich: alle Tuner der FRITZ!Box belegt.\n" +
-                "Ein Proxy (siehe Anleitung) löst das zuverlässig. Menütaste ☰: Einstellungen"
-        }
-        return "Auch der Proxy konnte den Sender nicht liefern.$detail\n" +
-            "Läuft der Proxy? Sind alle Tuner der FRITZ!Box belegt?\nMenütaste ☰: Einstellungen"
+        return "Die App konnte den Sender nicht von der FRITZ!Box abspielen.$detail\n" +
+            "Möglich: alle Tuner der FRITZ!Box belegt oder die Adresse stimmt nicht.\n" +
+            "▲ ▼ anderer Sender, Menütaste ☰: Einstellungen"
     }
 
     private fun zap(delta: Int) {
@@ -628,17 +497,10 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Belegte/freie Tuner der FRITZ!Box (zählt auch andere Geräte mit); direkt per DESCRIBE, sonst über den Proxy
+    // Belegte/freie Tuner der FRITZ!Box per DESCRIBE (zählt auch andere Geräte mit)
     private fun updateTuners() {
         val host = fritzHost()
-        val proxy = proxyBase()
-        background({
-            runCatching { Dvb.describeTuners(host) }.getOrElse {
-                if (proxy.isEmpty()) throw it
-                val o = JSONObject(Net.fetchText("$proxy/api/tuners", 5000))
-                TunerStatus(o.getInt("total"), o.getInt("used"), o.getInt("free"), o.optInt("streams"))
-            }
-        }) { r ->
+        background({ Dvb.describeTuners(host) }) { r ->
             val t = r.getOrNull()
             if (t == null || t.total == 0) {
                 show(infoTuners, false)
@@ -656,8 +518,6 @@ class MainActivity : AppCompatActivity() {
         infoName.text = ch.name
         infoList.text = listLabel(listId)
         badge(infoList, Color.parseColor("#CCCCCC"))
-        infoVia.text = if (via == "proxy") "PROXY" else "DIREKT"
-        badge(infoVia, color(if (via == "proxy") R.color.warn else if (via == "direct") R.color.ok else R.color.muted))
         infoClock.text = fmtTime(System.currentTimeMillis())
         renderInfoEpg()
         show(infobar, true)
@@ -945,10 +805,6 @@ class MainActivity : AppCompatActivity() {
         }
         val cached = epgDetail[ch.url]
         if (cached != null) renderDetail(cached.events) else epgEvents.removeAllViews()
-        if (epgSources().isEmpty()) {
-            renderDetail(null, "Keine Programminfos: Der Modus \"Nur Proxy\" braucht eine Proxy-Adresse.")
-            return
-        }
         if (cached != null && System.currentTimeMillis() - cached.fetched < EPG_MAX_AGE) return
         handler.postDelayed(detailRunnable, 250)
     }
@@ -956,21 +812,12 @@ class MainActivity : AppCompatActivity() {
     private fun loadDetail() {
         val ch = channels[overlayListId]?.getOrNull(overlayIndex) ?: return
         background({
-            fromEpgSources(
-                proxy = {
-                    val r = JSONObject(Net.fetchText("${proxyBase()}/api/epg/channel/${Net.b64url(ch.url)}", 8000))
-                    parseEvents(r.optJSONArray("events"))
-                },
-                local = {
-                    localEpg.ensureStarted()
-                    localEpg.upcoming(ch.url, 40)
-                }
-            )
+            localEpg.ensureStarted()
+            localEpg.upcoming(ch.url, 40)
         }) { r ->
             val cur = channels[overlayListId]?.getOrNull(overlayIndex)
             val visible = screen == Screen.CHANNELS && cur?.url == ch.url
-            r.onSuccess { (events, source) ->
-                epgSource = source
+            r.onSuccess { events ->
                 // leere Antwort nicht lange merken, der EPG kann gerade erst eingelesen werden
                 val now = System.currentTimeMillis()
                 epgDetail[ch.url] = EpgDetail(events, if (events.isNotEmpty()) now else now - EPG_MAX_AGE + 20000)
@@ -989,10 +836,8 @@ class MainActivity : AppCompatActivity() {
             epgEvents.addView(TextView(this).apply {
                 textSize = 14f
                 setTextColor(Color.parseColor("#777777"))
-                text = message ?: if (epgSource == "local")
-                    "Noch keine Programminfos. Die App liest den EPG nach dem Start aus dem Kabelsignal ein, das dauert ein paar Minuten."
-                else
-                    "Keine Programminfos (der Proxy liest den EPG beim Start ein, das dauert ein paar Minuten)."
+                text = message
+                    ?: "Noch keine Programminfos. Die App liest den EPG nach dem Start aus dem Kabelsignal ein, das dauert ein paar Minuten."
             })
             return
         }
@@ -1088,30 +933,18 @@ class MainActivity : AppCompatActivity() {
 
     // ---------- Einstellungen ----------
 
-    private var draftMode = "auto"
-
     private fun openSettings(message: String = "", bad: Boolean = false) {
         screen = Screen.SETTINGS
         setFritz.setText(settings.fritzHost)
-        setProxy.setText(settings.proxyUrl)
-        draftMode = settings.mode
-        renderMode()
         setSettingsStatus(message, bad)
         show(settingsPanel, true)
-        modeButtons[draftMode]?.requestFocus()
+        btnTest.requestFocus()
     }
 
     private fun closeSettings() {
         currentFocus?.clearFocus()
         screen = Screen.TV
         show(settingsPanel, false)
-    }
-
-    private fun renderMode() {
-        for ((mode, b) in modeButtons) {
-            b.isActivated = mode == draftMode
-            b.setTextColor(if (mode == draftMode) Color.WHITE else Color.parseColor("#DDDDDD"))
-        }
     }
 
     private fun setSettingsStatus(text: String, bad: Boolean = false) {
@@ -1121,11 +954,7 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-    private fun readDraft() = Settings(
-        setFritz.text.toString().trim().ifEmpty { BuildConfig.FRITZ_HOST },
-        setProxy.text.toString().trim(),
-        draftMode
-    )
+    private fun readDraft() = Settings(setFritz.text.toString().trim().ifEmpty { BuildConfig.FRITZ_HOST })
 
     private fun testConnection() {
         val d = readDraft()
@@ -1140,17 +969,6 @@ class MainActivity : AppCompatActivity() {
             runCatching { Dvb.describeTuners(d.fritzHost) }
                 .onSuccess { lines += "Tuner: ${it.used} von ${it.total} belegt" }
                 .onFailure { lines += "Tuner: keine Angabe (${it.message})" }
-            if (d.proxyUrl.isNotEmpty()) {
-                var base = d.proxyUrl.trimEnd('/')
-                if (!base.startsWith("http://") && !base.startsWith("https://")) base = "http://$base"
-                runCatching { JSONObject(Net.fetchText("$base/api/status", 5000)) }
-                    .onSuccess {
-                        val ffmpeg = it.optBoolean("ffmpeg", true)
-                        lines += "Proxy: OK" + if (ffmpeg) "" else " – aber ffmpeg fehlt!"
-                        if (!ffmpeg) bad = true
-                    }
-                    .onFailure { lines += "Proxy: nicht erreichbar (${it.message})"; bad = true }
-            }
             lines.joinToString("\n") to bad
         }) { r ->
             r.onSuccess { (text, bad) -> if (screen == Screen.SETTINGS) setSettingsStatus(text, bad) }
@@ -1159,15 +977,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun saveSettings() {
         val d = readDraft()
-        val changed = d.fritzHost != settings.fritzHost || d.proxyUrl != settings.proxyUrl || d.mode != settings.mode
+        val changed = d.fritzHost != settings.fritzHost
         settings = d
-        prefs.edit().putString("fritzHost", d.fritzHost).putString("proxyUrl", d.proxyUrl).putString("mode", d.mode).apply()
+        // proxyUrl und mode stammen aus Versionen mit Proxy
+        prefs.edit().putString("fritzHost", d.fritzHost).remove("proxyUrl").remove("mode").apply()
         closeSettings()
         if (changed) {
             channels.clear()
             epg.clear()
             epgDetail.clear()
-            epgProxyFailed = false
             start()
         }
     }
@@ -1195,12 +1013,12 @@ class MainActivity : AppCompatActivity() {
         )),
         TutPage("Infoleiste", listOf(
             "⏯" to "zeigt Sender, was gerade läuft und was danach kommt",
-            "DIREKT / PROXY" to "woher das Bild kommt: direkt von der FRITZ!Box oder über den Proxy",
+            "HD / SD / Radio" to "aus welcher Senderliste der Sender stammt",
             "Tuner" to "wie viele Tuner der FRITZ!Box belegt bzw. frei sind (zählt auch andere Geräte mit)"
         )),
         TutPage("Einstellungen", listOf(
-            "☰ Menü" to "Einstellungen öffnen: Adresse der FRITZ!Box und des Proxys",
-            "Wiedergabe" to "Automatisch (erst direkt, sonst Proxy), Nur direkt oder Nur Proxy",
+            "☰ Menü" to "Einstellungen öffnen: Adresse der FRITZ!Box",
+            "Verbindung testen" to "prüft, ob die FRITZ!Box erreichbar ist und wie viele Tuner frei sind",
             "Anleitung" to "diese Anleitung jederzeit erneut anzeigen",
             "Zurück" to "im Fernsehbild beendet die App"
         ))
@@ -1221,7 +1039,7 @@ class MainActivity : AppCompatActivity() {
         tutorialOpen = false
         show(tutorialView, false)
         prefs.edit().putBoolean("tutorialSeen", true).apply()
-        if (screen == Screen.SETTINGS) modeButtons[draftMode]?.requestFocus()
+        if (screen == Screen.SETTINGS) btnTest.requestFocus()
     }
 
     private fun renderTutorial() {
@@ -1344,7 +1162,7 @@ class MainActivity : AppCompatActivity() {
             }.onFailure {
                 hideStatus()
                 openSettings(
-                    "Senderliste konnte nicht geladen werden:\n${it.message}\nBitte Adresse der FRITZ!Box prüfen oder einen Proxy eintragen.",
+                    "Senderliste konnte nicht geladen werden:\n${it.message}\nBitte Adresse der FRITZ!Box prüfen.",
                     true
                 )
             }

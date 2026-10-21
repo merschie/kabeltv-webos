@@ -1,6 +1,5 @@
 package de.local.kabeltv
 
-import android.util.Base64
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
@@ -9,11 +8,10 @@ data class Channel(val name: String, val url: String)
 
 object Net {
 
-    fun fetchText(address: String, timeoutMs: Int = 6000, method: String = "GET"): String {
+    fun fetchText(address: String, timeoutMs: Int = 6000): String {
         val conn = URL(address).openConnection() as HttpURLConnection
         conn.connectTimeout = timeoutMs
         conn.readTimeout = timeoutMs
-        conn.requestMethod = method
         conn.useCaches = false
         try {
             if (conn.responseCode != 200) throw IOException("HTTP ${conn.responseCode}")
@@ -39,10 +37,6 @@ object Net {
         }
         return out
     }
-
-    // Wie in der webOS-App: Base64url ohne Auffüllzeichen
-    fun b64url(s: String): String =
-        Base64.encodeToString(s.toByteArray(), Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP)
 
     fun freqOf(url: String): String? = Regex("[?&]freq=([\\d.]+)").find(url)?.groupValues?.get(1)
 

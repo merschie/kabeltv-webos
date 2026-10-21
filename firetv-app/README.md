@@ -19,13 +19,15 @@ Fernbedienungen mit Zifferntasten, Farbtasten oder P+/P− funktionieren wie unt
 
 ## Wiedergabe und Programmführer
 
-Die FRITZ!Box schickt MPEG-TS per RTP (Payload-Typ 33). Das kann der RTSP-Player von Media3 nicht. Im Modus *Direkt* holt deshalb `RtspSession` den Stream selbst (wie der webOS-Stream-Dienst), entfernt die RTP-Header und gibt das MPEG-TS über `RtspTsDataSource` an ExoPlayer weiter.
+Die App spielt die Sender direkt von der FRITZ!Box ab, ein Proxy oder anderes Gerät ist nicht nötig. Die FRITZ!Box schickt MPEG-TS per RTP (Payload-Typ 33). Das kann der RTSP-Player von Media3 nicht. Deshalb holt `RtspSession` den Stream selbst (wie der webOS-Stream-Dienst), entfernt die RTP-Header und gibt das MPEG-TS über `RtspTsDataSource` an ExoPlayer weiter. Die Senderlisten kommen ebenfalls direkt von der FRITZ!Box (`/dvb/m3u/…`), die Tuner-Anzeige per RTSP-DESCRIBE.
 
-- **Automatisch** (Standard): erst direkt, bei Problemen über den Proxy.
-- **Nur direkt**: nur direkt von der FRITZ!Box.
-- **Nur Proxy**: HLS vom Unraid-Proxy.
+Den Programmführer liest die App selbst aus dem Kabelsignal (`LocalEpg`, Kotlin-Fassung von `epg.js` aus dem webOS-Stream-Dienst):
 
-Den EPG holt die App im Modus *Automatisch* zuerst vom Proxy. Antwortet der nicht (oder im Modus *Nur direkt*), liest sie ihn selbst aus dem Kabelsignal (`LocalEpg`, Kotlin-Fassung von `proxy/epg.js`): Sie tunt dafür jede Frequenz kurz an, belegt dabei einen Tuner und gibt ihn sofort ab, wenn ein Sender startet und alle Tuner belegt sind. Die Senderlogos kommen beim Bauen aus `webos-app/logos`.
+- **Beim Zuschauen** liest sie die Programmdaten im laufenden Stream mit, das kostet keinen Tuner.
+- **Scan im Hintergrund**: Sobald die App Programminfos braucht, tunt sie nach 15 Sekunden nacheinander jede Frequenz für 12 Sekunden an (nur Info-Daten, ohne Bild), danach alle 6 Stunden. Das belegt einen zweiten Tuner. Während ein Sender startet, wartet der Scan. Sind beim Senderwechsel alle Tuner belegt, gibt der Scan seinen Tuner sofort ab und versucht es nach 10 Minuten erneut.
+- Das Programm wird in der App zwischengespeichert und ist nach einem Neustart sofort wieder da.
+
+Die Senderlogos kommen beim Bauen aus `webos-app/logos`.
 
 ## Entwicklungsumgebung unter Windows 11
 

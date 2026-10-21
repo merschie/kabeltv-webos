@@ -12,12 +12,11 @@ android {
         // Fire OS 5 (Fire TV Stick 1./2. Gen.) entspricht API 22
         minSdk = 22
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.3.0"
+        versionCode = 4
+        versionName = "0.4.0"
 
-        // Adressen im Heimnetz, lassen sich später in den Einstellungen ändern
+        // Adresse im Heimnetz, lässt sich in den Einstellungen ändern
         buildConfigField("String", "FRITZ_HOST", "\"192.168.177.1\"")
-        buildConfigField("String", "PROXY_URL", "\"http://192.168.177.80:8095\"")
     }
 
     // Fester Debug-Schlüssel im Repo, damit CI-Builds und lokale Builds sich gegenseitig
@@ -74,7 +73,6 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.media3.exoplayer)
-    implementation(libs.media3.exoplayer.hls)
     implementation(libs.media3.extractor)
     implementation(libs.media3.ui)
 

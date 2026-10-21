@@ -242,10 +242,6 @@
                 style="@style/Badge" />
 
             <TextView
-                android:id="@+id/info_via"
-                style="@style/Badge" />
-
-            <TextView
                 android:id="@+id/info_tuners"
                 style="@style/Badge"
                 android:visibility="gone" />
@@ -440,42 +436,7 @@
                 style="@style/SettingsInput"
                 android:hint="fritz.box"
                 android:inputType="textUri"
-                android:nextFocusDown="@+id/set_proxy" />
-
-            <TextView
-                style="@style/SettingsLabel"
-                android:text="Proxy-Adresse (optional)" />
-
-            <EditText
-                android:id="@+id/set_proxy"
-                style="@style/SettingsInput"
-                android:hint="http://192.168.177.80:8095 (leer = kein Proxy)"
-                android:inputType="textUri" />
-
-            <TextView
-                style="@style/SettingsLabel"
-                android:text="Wiedergabe" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal">
-
-                <Button
-                    android:id="@+id/mode_auto"
-                    style="@style/SettingsButton"
-                    android:text="Automatisch" />
-
-                <Button
-                    android:id="@+id/mode_direct"
-                    style="@style/SettingsButton"
-                    android:text="Nur direkt" />
-
-                <Button
-                    android:id="@+id/mode_proxy"
-                    style="@style/SettingsButton"
-                    android:text="Nur Proxy" />
-            </LinearLayout>
+                android:nextFocusDown="@+id/btn_test" />
 
             <LinearLayout
                 android:layout_width="match_parent"
