@@ -897,6 +897,7 @@
     } else if (el.id === 'btn-test') testConnection();
     else if (el.id === 'btn-save') saveSettings();
     else if (el.id === 'btn-cancel') closeSettings();
+    else if (el.id === 'btn-tutorial') openTutorial();
   }
 
   function settingsKey(code) {
@@ -948,6 +949,84 @@
     el.addEventListener('click', function () { navIndex = i; updateNav(); activateNav(el); });
   });
 
+  // ---------- Anleitung ----------
+
+  var TUTORIAL = [
+    { title: 'Willkommen bei Kabel TV', rows: [
+      ['', 'Live-Fernsehen und Radio direkt von der FRITZ!Box – alles mit der normalen Fernbedienung.'],
+      ['', 'Die nächsten Seiten zeigen kurz, welche Taste was macht. Das Bild läuft im Hintergrund schon los.'],
+      ['&#9664; &#9654;', 'blättern, OK geht weiter, Zurück überspringt die Anleitung']
+    ] },
+    { title: 'Sender wechseln', rows: [
+      ['&#9650; &#9660; / CH+ CH−', 'nächster bzw. vorheriger Sender'],
+      ['0 – 9', 'Sendernummer direkt eingeben, nach kurzer Pause wird umgeschaltet (OK schaltet sofort)'],
+      ['<span class="key green"></span> Grün', 'zwischen den Listen HD, SD und Radio wechseln']
+    ] },
+    { title: 'Senderliste mit Programm', rows: [
+      ['OK / &#9664; &#9654;', 'Senderliste öffnen, rechts steht das Programm des gewählten Senders'],
+      ['&#9664; &#9654;', 'in der Liste: HD, SD oder Radio'],
+      ['&#9650; &#9660; / CH+ CH−', 'Sender auswählen, mit CH+/CH− in Zehnerschritten'],
+      ['OK', 'ausgewählten Sender abspielen, Zurück schließt die Liste']
+    ] },
+    { title: 'Infoleiste', rows: [
+      ['<span class="key yellow"></span> Gelb / Info', 'zeigt Sender, was gerade läuft und was danach kommt'],
+      ['DIREKT / PROXY', 'woher das Bild kommt: direkt von der FRITZ!Box oder über den Proxy'],
+      ['Tuner', 'wie viele Tuner der FRITZ!Box belegt bzw. frei sind (zählt auch andere Geräte mit)']
+    ] },
+    { title: 'Einstellungen', rows: [
+      ['<span class="key red"></span> Rot', 'Einstellungen öffnen: Adresse der FRITZ!Box und des Proxys'],
+      ['Wiedergabe', 'Automatisch (erst direkt, sonst Proxy), Nur direkt oder Nur Proxy'],
+      ['Anleitung', 'diese Anleitung jederzeit erneut anzeigen'],
+      ['Zurück', 'im Fernsehbild beendet die App']
+    ] }
+  ];
+
+  var tutorial = { open: false, page: 0 };
+
+  function openTutorial() {
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    tutorial.open = true;
+    tutorial.page = 0;
+    renderTutorial();
+    show($('tutorial'), true);
+  }
+
+  function closeTutorial() {
+    tutorial.open = false;
+    show($('tutorial'), false);
+    save('tutorialSeen', true);
+  }
+
+  function renderTutorial() {
+    var p = TUTORIAL[tutorial.page];
+    $('tut-step').textContent = 'Anleitung ' + (tutorial.page + 1) + ' / ' + TUTORIAL.length;
+    $('tut-title').textContent = p.title;
+    $('tut-body').innerHTML = p.rows.map(function (r) {
+      return '<div class="tut-row">' + (r[0] ? '<div class="tut-key">' + r[0] + '</div>' : '') +
+        '<div class="tut-text">' + r[1] + '</div></div>';
+    }).join('');
+    $('tut-ok').textContent = tutorial.page < TUTORIAL.length - 1 ? 'Weiter' : 'Fertig';
+    $('tut-dots').innerHTML = TUTORIAL.map(function (x, i) {
+      return '<span' + (i === tutorial.page ? ' class="active"' : '') + '></span>';
+    }).join('');
+  }
+
+  function tutorialKey(code) {
+    switch (code) {
+      case KEY.RIGHT: case KEY.OK:
+        if (tutorial.page < TUTORIAL.length - 1) { tutorial.page++; renderTutorial(); } else closeTutorial();
+        break;
+      case KEY.LEFT:
+        if (tutorial.page > 0) { tutorial.page--; renderTutorial(); }
+        break;
+      case KEY.BACK: case KEY.ESC: case KEY.BACKSPACE: closeTutorial(); break;
+      default: break; // übrige Tasten nicht ans Fernsehbild durchreichen
+    }
+    return true;
+  }
+
+  $('tutorial').addEventListener('click', function () { tutorialKey(KEY.OK); });
+
   // ---------- Tasten ----------
 
   function exitApp() {
@@ -986,7 +1065,8 @@
 
   document.addEventListener('keydown', function (e) {
     var handled;
-    if (state.view === 'settings') handled = settingsKey(e.keyCode);
+    if (tutorial.open) handled = tutorialKey(e.keyCode);
+    else if (state.view === 'settings') handled = settingsKey(e.keyCode);
     else if (state.view === 'channels') handled = channelsKey(e.keyCode);
     else handled = tvKey(e.keyCode);
     if (handled) e.preventDefault();
@@ -1017,4 +1097,5 @@
 
   startTvService();
   start();
+  if (!load('tutorialSeen', false)) openTutorial();
 })();
