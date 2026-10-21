@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>Kabel TV</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <video id="video" autoplay playsinline></video>
+
+  <!-- Radio / Hintergrund wenn kein Bild -->
+  <div id="radio" class="hidden">
+    <div class="radio-icon">&#9835;</div>
+    <div id="radio-name"></div>
+  </div>
+
+  <!-- Laden / Fehler -->
+  <div id="status" class="hidden">
+    <div class="spinner"></div>
+    <div id="status-text"></div>
+  </div>
+  <div id="error" class="hidden">
+    <div id="error-title"></div>
+    <div id="error-text"></div>
+  </div>
+
+  <!-- Nummerneingabe -->
+  <div id="numinput" class="hidden"></div>
+
+  <!-- Infoleiste -->
+  <div id="infobar" class="hidden">
+    <div class="info-row">
+      <div id="info-num"></div>
+      <div id="info-name"></div>
+      <div id="info-list" class="badge"></div>
+      <div id="info-via" class="badge"></div>
+      <div id="info-clock"></div>
+    </div>
+    <div id="info-epg" class="hidden">
+      <div class="epg-line"><span class="epg-time" id="info-now-time"></span><span id="info-now-title"></span></div>
+      <div class="progress"><div id="info-now-progress"></div></div>
+      <div class="epg-line next"><span class="epg-time" id="info-next-time"></span><span id="info-next-title"></span></div>
+    </div>
+  </div>
+
+  <!-- Senderliste mit Programm -->
+  <div id="channels" class="panel hidden">
+    <div class="channels-col">
+      <div id="tabs"></div>
+      <ul id="channel-list"></ul>
+      <div class="hint">&#9650;&#9660; Auswahl &nbsp; &#9664;&#9654; Liste &nbsp; OK Abspielen &nbsp; <span class="key red"></span> Einstellungen</div>
+    </div>
+    <div id="epg-detail">
+      <h2 id="epg-channel"></h2>
+      <div id="epg-events"></div>
+    </div>
+  </div>
+
+  <!-- Einstellungen -->
+  <div id="settings" class="panel hidden">
+    <h1>Einstellungen</h1>
+    <label>FRITZ!Box-Adresse</label>
+    <input id="set-fritz" class="nav" type="text" placeholder="fritz.box">
+    <label>Proxy-Adresse (optional)</label>
+    <input id="set-proxy" class="nav" type="text" placeholder="http://192.168.177.80:8095 (leer = kein Proxy)">
+    <label>Wiedergabe</label>
+    <div class="segmented" id="set-mode">
+      <button class="nav" data-mode="auto">Automatisch</button>
+      <button class="nav" data-mode="direct">Nur direkt</button>
+      <button class="nav" data-mode="proxy">Nur Proxy</button>
+    </div>
+    <div class="row">
+      <button class="nav" id="btn-test">Verbindung testen</button>
+      <button class="nav primary" id="btn-save">Speichern</button>
+      <button class="nav" id="btn-cancel">Abbrechen</button>
+    </div>
+    <div id="settings-status"></div>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "name": "kabeltv-proxy",
+  "version": "1.0.0",
+  "description": "RTSP→HLS-Proxy für FRITZ!Box-Cable-Streams auf LG webOS",
+  "main": "server.js",
+  "private": true,
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
