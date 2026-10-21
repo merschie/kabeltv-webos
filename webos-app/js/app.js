@@ -1076,8 +1076,9 @@
 
   // ---------- Tasten ----------
 
+  // platformBack fragt erst „App verlassen?“. Bricht man ab, soll der Sender weiterlaufen,
+  // deshalb hier nicht stoppen: Den Tuner gibt visibilitychange frei, sobald die App wirklich weg ist.
   function exitApp() {
-    stopPlayback();
     if (window.PalmSystem && window.PalmSystem.platformBack) window.PalmSystem.platformBack();
     else window.close();
   }
