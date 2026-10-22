@@ -1132,9 +1132,19 @@
 
   // Startparameter für Tests und Screenshots, z. B.
   // ares-launch --device tv de.merschie.kabelboxtv --params '{"demo":true,"view":"channels"}'
+  // oder im Browser index.html?demo=1
   function launchParams() {
     try {
       var p = window.PalmSystem && window.PalmSystem.launchParams;
+      if (!p && window.location.search) {
+        // im Browser: index.html?demo=1&view=channels
+        var q = {};
+        window.location.search.slice(1).split('&').forEach(function (kv) {
+          var parts = kv.split('=');
+          q[decodeURIComponent(parts[0])] = parts[1] === undefined || parts[1] === '1' ? true : decodeURIComponent(parts[1]);
+        });
+        return q;
+      }
       return (typeof p === 'string' ? JSON.parse(p || '{}') : p) || {};
     } catch (e) { return {}; }
   }
