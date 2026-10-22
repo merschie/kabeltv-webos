@@ -50,12 +50,14 @@ if ($Store) {
     Ares ares-package webos-app service -o dist
 }
 
-foreach ($tv in $TvDevice) {
-    Write-Host "== App auf Fernseher '$tv' installieren"
-    try {
-        Ares ares-install --device $tv $ipk
-        Ares ares-launch --device $tv $appinfo.id
-    } catch {
-        Write-Warning "Fernseher '$tv' nicht erreichbar (Developer Mode abgelaufen oder TV aus?): $_"
+if (-not $NoTv) {
+    foreach ($tv in $TvDevice) {
+        Write-Host "== App auf Fernseher '$tv' installieren"
+        try {
+            Ares ares-install --device $tv $ipk
+            Ares ares-launch --device $tv $appinfo.id
+        } catch {
+            Write-Warning "Fernseher '$tv' nicht erreichbar (Developer Mode abgelaufen oder TV aus?): $_"
+        }
     }
 }
