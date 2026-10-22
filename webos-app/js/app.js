@@ -951,6 +951,7 @@
   navEls = Array.prototype.slice.call(document.querySelectorAll('#settings .nav'));
   navEls.forEach(function (el, i) {
     el.addEventListener('click', function () { navIndex = i; updateNav(); activateNav(el); });
+    el.addEventListener('mouseenter', function () { navIndex = i; updateNav(); });
   });
 
   // ---------- Anleitung ----------
@@ -1046,9 +1047,18 @@
     return true;
   }
 
+  Array.prototype.forEach.call(document.querySelectorAll('#nofritz .nf-btn'), function (el, i) {
+    el.addEventListener('mouseenter', function () { nofritzIndex = i; renderNoFritz(); });
+  });
+
   $('nofritz').addEventListener('click', function (e) {
     var act = e.target.getAttribute && e.target.getAttribute('data-act');
     if (act) noFritzAction(act);
+  });
+
+  // Magic Remote: ein Klick ins Fernsehbild öffnet die Senderliste (sonst gäbe es mit dem Zeiger keinen Weg dorthin)
+  video.addEventListener('click', function () {
+    if (state.view === 'tv' && !tutorial.open && state.channels[state.listId]) openChannels();
   });
 
   // ---------- Tasten ----------
