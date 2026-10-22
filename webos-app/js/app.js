@@ -1112,7 +1112,7 @@
   function start() {
     var listId = state.listId;
     showStatus(t('list.loading'));
-    loadList(listId).then(function () {
+    return loadList(listId).then(function () {
       play(listId, load('last.' + listId, 0));
     }).catch(function (e) {
       hideStatus();
@@ -1120,7 +1120,31 @@
     });
   }
 
+  // Startparameter für Tests und Screenshots, z. B.
+  // ares-launch --device tv de.merschie.kabelboxtv --params '{"demo":true,"view":"channels"}'
+  function launchParams() {
+    try {
+      var p = window.PalmSystem && window.PalmSystem.launchParams;
+      return (typeof p === 'string' ? JSON.parse(p || '{}') : p) || {};
+    } catch (e) { return {}; }
+  }
+
+  var params = launchParams();
+  if (params.demo) {
+    state.demo = true;
+    state.listId = params.list || 'tvhd';
+  }
   startTvService();
-  start();
-  if (!load('tutorialSeen', false)) openTutorial();
+  var started = start();
+  if (params.view) {
+    started.then(function () {
+      setTimeout(function () {
+        if (params.view === 'channels') openChannels();
+        else if (params.view === 'settings') openSettings();
+        else if (params.view === 'tutorial') openTutorial();
+      }, 3000);
+    });
+  } else if (!load('tutorialSeen', false)) {
+    openTutorial();
+  }
 })();
