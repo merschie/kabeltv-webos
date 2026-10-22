@@ -43,5 +43,8 @@ object Net {
     fun pidsOf(url: String): List<Int> =
         Regex("[?&]pids=([\\d,]+)").find(url)?.groupValues?.get(1)?.split(',')?.mapNotNull { it.toIntOrNull() } ?: emptyList()
 
+    // Ohne avm=1: Damit behandelt die FRITZ!Box eine zweite Sitzung desselben Geräts als Senderwechsel und
+    // schickt dem laufenden Sender keine Daten mehr. Ohne den Parameter laufen beide parallel.
     fun siUrl(url: String): String = url.replace(Regex("pids=[^&]*"), "pids=${Dvb.SI_PIDS}")
+        .replace(Regex("([?&])avm=1(&|$)")) { if (it.groupValues[2].isNotEmpty()) it.groupValues[1] else "" }
 }

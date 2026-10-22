@@ -44,8 +44,9 @@ class NetTest {
     fun siUrlKeepsTuningButOnlyRequestsSiPids() {
         val url = Net.parseM3u(m3u)[0].url
         assertEquals(
-            "rtsp://192.168.177.1:554/?avm=1&freq=330&bw=8&msys=dvbc&mtype=256qam&sr=6900&specinv=0&pids=0,17,18",
+            "rtsp://192.168.177.1:554/?freq=330&bw=8&msys=dvbc&mtype=256qam&sr=6900&specinv=0&pids=0,17,18",
             Net.siUrl(url)
         )
+        assertEquals("rtsp://h/?freq=1&pids=0,17,18", Net.siUrl("rtsp://h/?freq=1&pids=5&avm=1"))
     }
 }
