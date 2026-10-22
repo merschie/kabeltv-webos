@@ -61,7 +61,7 @@
     <div class="channels-col">
       <div id="tabs"></div>
       <ul id="channel-list"></ul>
-      <div class="hint">&#9650;&#9660; Auswahl &nbsp; &#9664;&#9654; Liste &nbsp; OK Abspielen &nbsp; <span class="key red"></span> Einstellungen</div>
+      <div class="hint" data-i18n-html="hint.channels"></div>
     </div>
     <div id="epg-detail">
       <h2 id="epg-channel"></h2>
@@ -71,20 +71,20 @@
 
   <!-- Einstellungen -->
   <div id="settings" class="panel hidden">
-    <h1>Einstellungen</h1>
-    <label>FRITZ!Box-Adresse</label>
+    <h1 data-i18n="settings.title"></h1>
+    <label data-i18n="settings.fritz"></label>
     <input id="set-fritz" class="nav" type="text" placeholder="fritz.box">
-    <label>Statusseite im Heimnetz (Fehlersuche)</label>
+    <label data-i18n="settings.lan"></label>
     <div class="segmented" id="set-lan">
-      <button class="nav" data-lan="off">Aus</button>
-      <button class="nav" data-lan="on">An</button>
+      <button class="nav" data-lan="off" data-i18n="settings.off"></button>
+      <button class="nav" data-lan="on" data-i18n="settings.on"></button>
     </div>
     <div class="row">
-      <button class="nav" id="btn-test">Verbindung testen</button>
-      <button class="nav primary" id="btn-save">Speichern</button>
-      <button class="nav" id="btn-cancel">Abbrechen</button>
-      <button class="nav" id="btn-tutorial">Anleitung</button>
-      <button class="nav" id="btn-demo">Demo ansehen</button>
+      <button class="nav" id="btn-test" data-i18n="btn.test"></button>
+      <button class="nav primary" id="btn-save" data-i18n="btn.save"></button>
+      <button class="nav" id="btn-cancel" data-i18n="btn.cancel"></button>
+      <button class="nav" id="btn-tutorial" data-i18n="btn.tutorial"></button>
+      <button class="nav" id="btn-demo" data-i18n="btn.demo"></button>
     </div>
     <div id="settings-status"></div>
   </div>
@@ -92,16 +92,16 @@
   <!-- Hinweis, wenn keine FRITZ!Box antwortet -->
   <div id="nofritz" class="hidden">
     <div class="tut-box">
-      <h1>Keine FRITZ!Box gefunden</h1>
-      <p>KabelBox TV zeigt das Fernsehprogramm einer <b>FRITZ!Box Cable</b> im selben Heimnetz. In der FRITZ!Box muss unter <i>DVB-C</i> das Streaming eingeschaltet sein.</p>
-      <p>Ohne FRITZ!Box lässt sich die App mit Testbildern ausprobieren.</p>
+      <h1 data-i18n="nofritz.title"></h1>
+      <p data-i18n-html="nofritz.intro"></p>
+      <p data-i18n="nofritz.demo"></p>
       <p id="nofritz-detail"></p>
       <div class="nf-row">
-        <button class="nf-btn primary" data-act="demo">Demo ansehen</button>
-        <button class="nf-btn" data-act="settings">Einstellungen</button>
-        <button class="nf-btn" data-act="retry">Erneut versuchen</button>
+        <button class="nf-btn primary" data-act="demo" data-i18n="btn.demo"></button>
+        <button class="nf-btn" data-act="settings" data-i18n="btn.settings"></button>
+        <button class="nf-btn" data-act="retry" data-i18n="btn.retry"></button>
       </div>
-      <div class="tut-hint">&#9664;&#9654; Auswahl &nbsp; OK Bestätigen &nbsp; Zurück App beenden</div>
+      <div class="tut-hint" data-i18n-html="nofritz.hint"></div>
     </div>
   </div>
 
@@ -112,10 +112,11 @@
       <h1 id="tut-title"></h1>
       <div id="tut-body"></div>
       <div id="tut-dots"></div>
-      <div class="tut-hint">&#9664;&#9654; Blättern &nbsp; OK <span id="tut-ok">Weiter</span> &nbsp; Zurück Überspringen</div>
+      <div class="tut-hint" data-i18n-html="tut.hint"></div>
     </div>
   </div>
 
+  <script src="js/i18n.js"></script>
   <script src="js/logos.js"></script>
   <script src="js/app.js"></script>
 </body>

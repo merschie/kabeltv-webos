@@ -16,6 +16,10 @@
 
   var DIRECT_TIMEOUT = 10000;
 
+  var i18n = window.KabelI18n;
+  var t = i18n.t;
+  i18n.apply();
+
   var $ = function (id) { return document.getElementById(id); };
   var video = $('video');
 
@@ -56,13 +60,13 @@
 
   function fetchText(url, timeout) {
     var ctrl = new AbortController();
-    var t = setTimeout(function () { ctrl.abort(); }, timeout || 6000);
+    var timer = setTimeout(function () { ctrl.abort(); }, timeout || 6000);
     return fetch(url, { signal: ctrl.signal, cache: 'no-store' })
       .then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.text();
       })
-      .finally(function () { clearTimeout(t); });
+      .finally(function () { clearTimeout(timer); });
   }
 
   function parseM3U(text) {
@@ -93,7 +97,7 @@
 
   function startTvService() {
     if (typeof window.PalmServiceBridge === 'undefined') {
-      tvService.error = 'kein webOS';
+      tvService.error = t('svc.noWebos');
       return;
     }
     try {
@@ -102,8 +106,8 @@
         try {
           var r = JSON.parse(msg);
           if (r.returnValue && r.port) tvService.port = r.port;
-          else tvService.error = r.errorText || 'Dienst antwortet nicht';
-        } catch (e) { tvService.error = 'ungültige Antwort'; }
+          else tvService.error = i18n.serviceText(r.errorText) || t('svc.noAnswer');
+        } catch (e) { tvService.error = t('svc.badAnswer'); }
       };
       // Abo hält den Dienst am Leben, solange die App läuft
       bridge.call(SERVICE_URI, JSON.stringify({ subscribe: true, lan: !!settings.lanStatus }));
@@ -161,12 +165,12 @@
 
   var DEMO_LISTS = {
     tvhd: [
-      { name: 'Demo-Kanal 1', url: 'demo/demo1.mp4' },
-      { name: 'Demo-Kanal 2', url: 'demo/demo2.mp4' },
-      { name: 'Demo-Kanal 3', url: 'demo/demo3.mp4' }
+      { name: t('demo.channel', { n: 1 }), url: 'demo/demo1.mp4' },
+      { name: t('demo.channel', { n: 2 }), url: 'demo/demo2.mp4' },
+      { name: t('demo.channel', { n: 3 }), url: 'demo/demo3.mp4' }
     ],
-    tvsd: [{ name: 'Demo-Kanal SD', url: 'demo/demo2.mp4' }],
-    radio: [{ name: 'Demo-Radio', url: 'demo/radio1.m4a' }]
+    tvsd: [{ name: t('demo.channelSd'), url: 'demo/demo2.mp4' }],
+    radio: [{ name: t('demo.radio'), url: 'demo/radio1.m4a' }]
   };
   var DEMO_SLOT = 30 * 60000;
 
@@ -180,8 +184,8 @@
       out.push({
         start: first + k * DEMO_SLOT,
         end: first + (k + 1) * DEMO_SLOT,
-        title: 'Demo-Sendung ' + no,
-        text: 'Beispieltext zur Demo-Sendung ' + no + '. Mit einer FRITZ!Box Cable steht hier das echte Programm aus dem Kabelsignal.'
+        title: t('demo.show', { n: no }),
+        text: t('demo.text', { n: no })
       });
     }
     return out;
@@ -218,7 +222,7 @@
   function fetchEpg(path) {
     if (state.demo) return Promise.resolve(demoEpg(path));
     return waitForTvService(3000).then(function () {
-      if (!serviceBase()) throw new Error('Stream-Dienst läuft nicht');
+      if (!serviceBase()) throw new Error(t('svc.notRunning'));
       var host = (settings.fritzHost || DEFAULTS.fritzHost).trim();
       return fetchText(serviceBase() + path + '?host=' + encodeURIComponent(host), 8000);
     }).then(JSON.parse);
@@ -255,7 +259,7 @@
 
     var host = (settings.fritzHost || DEFAULTS.fritzHost).trim();
     return fetchText('http://' + host + '/dvb/m3u/' + listId + '.m3u').then(parseM3U).then(function (list) {
-      if (!list.length) throw new Error('Senderliste ist leer');
+      if (!list.length) throw new Error(t('list.empty'));
       state.channels[listId] = list;
       return list;
     });
@@ -322,14 +326,14 @@
     showInfo();
     video.loop = state.demo;
     if (state.demo) {
-      startLoader(ch.name, 'Demo wird gestartet', ch.name);
+      startLoader(ch.name, t('load.demo'), ch.name);
     } else {
-      startLoader(ch.name, tvService.port ? 'Verbindung zur FRITZ!Box wird aufgebaut' : 'Stream-Dienst im Fernseher wird gestartet', ch.name);
+      startLoader(ch.name, tvService.port ? t('load.connecting') : t('load.service'), ch.name);
     }
     (state.demo ? Promise.resolve() : waitForTvService(3000)).then(function () {
       if (token !== state.playToken) return false;
       if (state.demo) return tryPlay(ch.url, DIRECT_TIMEOUT, token);
-      setLoaderBar(10, 'Verbindung zur FRITZ!Box wird aufgebaut');
+      setLoaderBar(10, t('load.connecting'));
       return tryPlay(directStreamUrl(ch.url), DIRECT_TIMEOUT, token);
     }).then(function (ok) {
       if (token !== state.playToken) return;
@@ -339,15 +343,15 @@
         return;
       }
       hideStatus();
-      showError('Wiedergabe fehlgeschlagen', failureHint());
+      showError(t('play.failed'), failureHint());
     });
   }
 
   function failureHint() {
-    if (state.demo) return 'Das Demo-Video ließ sich nicht abspielen.\nRote Taste: Einstellungen';
-    return 'Der Fernseher konnte den Sender nicht abspielen' +
-      (tvService.port ? '' : ' (Stream-Dienst: ' + (tvService.error || 'nicht gestartet') + ')') + '.\n' +
-      'Möglich: alle Tuner der FRITZ!Box belegt.\nRote Taste: Einstellungen';
+    if (state.demo) return t('play.demoFailed');
+    return t('play.tvFailed', {
+      service: tvService.port ? '' : t('play.serviceState', { state: tvService.error || t('svc.notStarted') })
+    });
   }
 
   function zap(delta) {
@@ -363,17 +367,17 @@
   // Belegte/freie Tuner der FRITZ!Box (zählt auch andere Geräte mit), über den Dienst im TV
   function fetchTuners() {
     if (state.demo) return Promise.reject(new Error('Demo'));
-    if (!tvService.port) return Promise.reject(new Error('Stream-Dienst läuft nicht'));
+    if (!tvService.port) return Promise.reject(new Error(t('svc.notRunning')));
     var host = (settings.fritzHost || DEFAULTS.fritzHost).trim();
     return fetchText('http://127.0.0.1:' + tvService.port + '/tuners?host=' + encodeURIComponent(host), 5000).then(JSON.parse);
   }
 
   function updateTuners() {
     var el = $('info-tuners');
-    fetchTuners().then(function (t) {
-      if (!t.total) throw new Error('keine Angabe');
-      el.textContent = 'Tuner ' + t.used + '/' + t.total + ' belegt · ' + t.free + ' frei';
-      el.className = 'badge ' + (t.free === 0 ? 'full' : t.free === 1 ? 'low' : 'ok');
+    fetchTuners().then(function (tu) {
+      if (!tu.total) throw new Error('keine Angabe');
+      el.textContent = t('tuners', { used: tu.used, total: tu.total, free: tu.free });
+      el.className = 'badge ' + (tu.free === 0 ? 'full' : tu.free === 1 ? 'low' : 'ok');
       show(el, true);
     }).catch(function () { show(el, false); });
   }
@@ -532,8 +536,8 @@
 
   function showBuffering() {
     loader.phase = 'buffering';
-    $('status-text').textContent = 'Lade nach …';
-    setLoaderStep('Datenstrom stockt, Puffer wird aufgefüllt');
+    $('status-text').textContent = t('load.rebuffer');
+    setLoaderStep(t('load.stalled'));
     $('status').classList.remove('cover');
     $('status').classList.add('buffering');
     show($('status'), true);
@@ -546,15 +550,15 @@
   }
 
   // Zwischenschritte für den Balken; beim Start ist das echte Ende erst die laufende Zeit
-  video.addEventListener('loadstart', function () { if (loader.phase === 'starting') setLoaderBar(15, 'Stream wird angefordert'); });
-  video.addEventListener('loadedmetadata', function () { if (loader.phase === 'starting') setLoaderBar(40, 'Sender gefunden, Daten kommen an'); });
-  video.addEventListener('loadeddata', function () { if (loader.phase === 'starting') setLoaderBar(55, 'Erstes Bild empfangen'); });
-  video.addEventListener('canplay', function () { if (loader.phase === 'starting') setLoaderBar(65, 'Puffer wird gefüllt'); });
+  video.addEventListener('loadstart', function () { if (loader.phase === 'starting') setLoaderBar(15, t('load.request')); });
+  video.addEventListener('loadedmetadata', function () { if (loader.phase === 'starting') setLoaderBar(40, t('load.found')); });
+  video.addEventListener('loadeddata', function () { if (loader.phase === 'starting') setLoaderBar(55, t('load.firstFrame')); });
+  video.addEventListener('canplay', function () { if (loader.phase === 'starting') setLoaderBar(65, t('load.buffer')); });
   video.addEventListener('playing', function () {
     if (loader.phase !== 'starting' || loader.playingAt) return;
     loader.playingAt = Date.now();
     loader.startTime = video.currentTime;
-    setLoaderBar(75, 'Wiedergabe startet');
+    setLoaderBar(75, t('load.starting'));
   });
   video.addEventListener('waiting', function () {
     if (loader.phase === 'running') loader.waitingAt = Date.now();
@@ -563,14 +567,14 @@
   setInterval(function () {
     if (loader.phase === 'idle') return;
     var now = Date.now();
-    var t = video.currentTime;
-    var moved = t > loader.lastTime + 0.01;
-    loader.lastTime = t;
+    var pos = video.currentTime;
+    var moved = pos > loader.lastTime + 0.01;
+    loader.lastTime = pos;
     if (moved) loader.lastMove = now;
 
     if (loader.phase === 'starting') {
       if (!loader.playingAt) return;
-      var played = t - loader.startTime;
+      var played = pos - loader.startTime;
       setLoaderBar(75 + Math.min(1, Math.max(0, played / START_HOLD)) * 25);
       if (played >= START_HOLD || now - loader.playingAt > START_MAX) loaderRunning();
     } else if (loader.phase === 'running') {
@@ -580,8 +584,8 @@
     } else if (loader.phase === 'buffering') {
       var quiet = Math.round((now - loader.lastMove) / 1000);
       if (moved) loaderRunning();
-      else if (quiet >= 5) setLoaderStep('Seit ' + quiet + ' s keine Daten, Neustart nach ' + RECONNECT_MS / 1000 + ' s');
       else if (now - loader.lastMove > RECONNECT_MS && state.channels[state.listId]) play(state.listId, state.index);
+      else if (quiet >= 5) setLoaderStep(t('load.quiet', { quiet: quiet, restart: RECONNECT_MS / 1000 }));
     }
   }, 250);
   function showError(title, text) {
@@ -633,11 +637,11 @@
     var tabs = $('tabs');
     tabs.innerHTML = '';
     LISTS.forEach(function (l) {
-      var t = document.createElement('div');
-      t.className = 'tab' + (l.id === state.overlayListId ? ' active' : '');
-      t.textContent = l.label;
-      t.addEventListener('click', function () { switchOverlayList(l.id); });
-      tabs.appendChild(t);
+      var tab = document.createElement('div');
+      tab.className = 'tab' + (l.id === state.overlayListId ? ' active' : '');
+      tab.textContent = l.label;
+      tab.addEventListener('click', function () { switchOverlayList(l.id); });
+      tabs.appendChild(tab);
     });
   }
 
@@ -647,7 +651,7 @@
     ul.innerHTML = '';
     var list = state.channels[state.overlayListId];
     if (!list) {
-      ul.innerHTML = '<li>Lade …</li>';
+      ul.innerHTML = '<li>' + t('list.loadingShort') + '</li>';
       return;
     }
     list.forEach(function (ch, i) {
@@ -719,7 +723,7 @@
         var cur = (state.channels[state.overlayListId] || [])[state.overlayIndex];
         if (state.view === 'channels' && cur && cur.url === ch.url) renderDetail(events);
       }).catch(function () {
-        renderDetail(null, 'Programm konnte nicht geladen werden.');
+        renderDetail(null, t('epg.failed'));
       });
     }, 250);
   }
@@ -732,8 +736,7 @@
     if (!events.length) {
       var empty = document.createElement('div');
       empty.className = 'epg-empty';
-      empty.textContent = message ||
-        'Noch keine Programminfos. Der Fernseher liest den EPG nach dem Start aus dem Kabelsignal ein, das dauert ein paar Minuten.';
+      empty.textContent = message || t('epg.empty');
       box.appendChild(empty);
       return;
     }
@@ -777,7 +780,7 @@
     }).catch(function (e) {
       $('channel-list').innerHTML = '';
       var li = document.createElement('li');
-      li.textContent = 'Fehler: ' + e.message;
+      li.textContent = t('error.prefix', { msg: i18n.serviceText(e.message) });
       $('channel-list').appendChild(li);
     });
   }
@@ -861,12 +864,14 @@
 
   function testConnection() {
     var d = readDraft();
-    setSettingsStatus('Teste …');
+    setSettingsStatus(t('test.running'));
     var lines = [];
     var fritz = fetchText('http://' + d.fritzHost + '/dvb/m3u/tvhd.m3u', 5000)
-      .then(function (t) { lines.push('FRITZ!Box: OK (' + parseM3U(t).length + ' HD-Sender)'); return true; })
-      .catch(function (e) { lines.push('FRITZ!Box: nicht erreichbar (' + e.message + ')'); return false; });
-    lines.push('Stream-Dienst im TV: ' + (tvService.port ? 'läuft (Port ' + tvService.port + ')' : (tvService.error || 'nicht gestartet')));
+      .then(function (text) { lines.push(t('test.fritzOk', { count: parseM3U(text).length })); return true; })
+      .catch(function (e) { lines.push(t('test.fritzFail', { msg: e.message })); return false; });
+    lines.push(t('test.service', {
+      state: tvService.port ? t('test.serviceRunning', { port: tvService.port }) : (tvService.error || t('svc.notStarted'))
+    }));
     fritz.then(function (ok) { setSettingsStatus(lines.join('\n'), !ok); });
   }
 
@@ -950,35 +955,7 @@
 
   // ---------- Anleitung ----------
 
-  var TUTORIAL = [
-    { title: 'Willkommen bei KabelBox TV', rows: [
-      ['', 'Live-Fernsehen und Radio direkt von der FRITZ!Box – alles mit der normalen Fernbedienung.'],
-      ['', 'Die nächsten Seiten zeigen kurz, welche Taste was macht. Das Bild läuft im Hintergrund schon los.'],
-      ['&#9664; &#9654;', 'blättern, OK geht weiter, Zurück überspringt die Anleitung']
-    ] },
-    { title: 'Sender wechseln', rows: [
-      ['&#9650; &#9660; / CH+ CH−', 'nächster bzw. vorheriger Sender'],
-      ['0 – 9', 'Sendernummer direkt eingeben, nach kurzer Pause wird umgeschaltet (OK schaltet sofort)'],
-      ['<span class="key green"></span> Grün', 'zwischen den Listen HD, SD und Radio wechseln']
-    ] },
-    { title: 'Senderliste mit Programm', rows: [
-      ['OK / &#9664; &#9654;', 'Senderliste öffnen, rechts steht das Programm des gewählten Senders'],
-      ['&#9664; &#9654;', 'in der Liste: HD, SD oder Radio'],
-      ['&#9650; &#9660; / CH+ CH−', 'Sender auswählen, mit CH+/CH− in Zehnerschritten'],
-      ['OK', 'ausgewählten Sender abspielen, Zurück schließt die Liste']
-    ] },
-    { title: 'Infoleiste', rows: [
-      ['<span class="key yellow"></span> Gelb / Info', 'zeigt Sender, was gerade läuft und was danach kommt'],
-      ['Tuner', 'wie viele Tuner der FRITZ!Box belegt bzw. frei sind (zählt auch andere Geräte mit)']
-    ] },
-    { title: 'Einstellungen', rows: [
-      ['<span class="key red"></span> Rot', 'Einstellungen öffnen: Adresse der FRITZ!Box'],
-      ['Statusseite', 'Stream-Dienst für die Fehlersuche aus dem Heimnetz erreichbar machen'],
-      ['Anleitung', 'diese Anleitung jederzeit erneut anzeigen'],
-      ['Demo ansehen', 'Testbilder und Beispielprogramm ohne FRITZ!Box, Speichern beendet die Demo'],
-      ['Zurück', 'im Fernsehbild beendet die App']
-    ] }
-  ];
+  var TUTORIAL = t('tutorial');
 
   var tutorial = { open: false, page: 0 };
 
@@ -998,13 +975,13 @@
 
   function renderTutorial() {
     var p = TUTORIAL[tutorial.page];
-    $('tut-step').textContent = 'Anleitung ' + (tutorial.page + 1) + ' / ' + TUTORIAL.length;
+    $('tut-step').textContent = t('tut.step', { n: tutorial.page + 1, total: TUTORIAL.length });
     $('tut-title').textContent = p.title;
     $('tut-body').innerHTML = p.rows.map(function (r) {
       return '<div class="tut-row">' + (r[0] ? '<div class="tut-key">' + r[0] + '</div>' : '') +
         '<div class="tut-text">' + r[1] + '</div></div>';
     }).join('');
-    $('tut-ok').textContent = tutorial.page < TUTORIAL.length - 1 ? 'Weiter' : 'Fertig';
+    $('tut-ok').textContent = t(tutorial.page < TUTORIAL.length - 1 ? 'tut.next' : 'tut.done');
     $('tut-dots').innerHTML = TUTORIAL.map(function (x, i) {
       return '<span' + (i === tutorial.page ? ' class="active"' : '') + '></span>';
     }).join('');
@@ -1032,8 +1009,8 @@
 
   function openNoFritz(detail) {
     state.view = 'nofritz';
-    if (detail && /fetch|network/i.test(detail)) detail = 'keine Antwort';
-    $('nofritz-detail').textContent = 'Gesucht unter „' + (settings.fritzHost || DEFAULTS.fritzHost) + '“' + (detail ? ': ' + detail : '');
+    if (detail && /fetch|network/i.test(detail)) detail = t('nofritz.noAnswer');
+    $('nofritz-detail').textContent = t('nofritz.searched', { host: settings.fritzHost || DEFAULTS.fritzHost }) + (detail ? ': ' + detail : '');
     nofritzIndex = 0;
     renderNoFritz();
     show($('nofritz'), true);
@@ -1098,7 +1075,7 @@
         var idx = LISTS.map(function (l) { return l.id; }).indexOf(state.listId);
         var next = LISTS[(idx + 1) % LISTS.length].id;
         loadList(next).then(function () { play(next, load('last.' + next, 0)); })
-          .catch(function (e) { showError('Liste nicht verfügbar', e.message); });
+          .catch(function (e) { showError(t('list.unavailable'), e.message); });
         break;
       }
       case KEY.YELLOW: case KEY.INFO: showInfo(); break;
@@ -1134,7 +1111,7 @@
 
   function start() {
     var listId = state.listId;
-    showStatus('Lade Senderliste …');
+    showStatus(t('list.loading'));
     loadList(listId).then(function () {
       play(listId, load('last.' + listId, 0));
     }).catch(function (e) {

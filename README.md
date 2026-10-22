@@ -22,6 +22,10 @@ Der Videoplayer von webOS spielt kein RTSP. Deshalb bringt die App einen kleinen
 
 Mit dem Magic-Remote-Zeiger lässt sich ebenfalls alles anklicken.
 
+## Sprache
+
+Die App richtet sich nach der Systemsprache des Fernsehers: Deutsch bei deutscher Systemsprache, sonst Englisch. Die Texte stehen in `webos-app/js/i18n.js`. Zum Ausprobieren lässt sich die Sprache mit `index.html?lang=en` bzw. `?lang=de` erzwingen.
+
 ## Programmführer (EPG)
 
 Der Stream-Dienst im Fernseher liest das Programm direkt aus dem Kabelsignal (DVB-EIT):
