@@ -158,7 +158,7 @@ html, body {
 #info-epg { margin-top: 16px; padding-left: 108px; }
 .epg-line { font-size: 32px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .epg-line.next { color: #9aa; font-size: 28px; }
-.epg-time { display: inline-block; min-width: 190px; color: #9ab; }
+.epg-time { display: inline-block; min-width: 190px; margin-right: 24px; color: #9ab; }
 .progress { height: 6px; margin: 10px 0; background: rgba(255, 255, 255, .15); border-radius: 3px; overflow: hidden; }
 .progress > div { height: 100%; background: #4ea1ff; }
 #info-num { font-size: 56px; font-weight: bold; color: #4ea1ff; min-width: 80px; }
