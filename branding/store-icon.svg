@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Store-Icon für LG: einfarbiger, deckender Hintergrund ohne Verlauf und ohne runde Ecken (Kachelfarbe #0A8F80) -->
+  <rect width="512" height="512" fill="#0A8F80"/>
+  <rect x="96" y="124" width="320" height="220" rx="44" fill="#FFFFFF"/>
+  <rect x="206" y="364" width="100" height="24" rx="12" fill="#FFFFFF"/>
+  <path d="M140 234 C180 164 216 164 256 234 C296 304 332 304 372 234" fill="none" stroke="#0A8F80" stroke-width="32" stroke-linecap="round"/>
+</svg>
