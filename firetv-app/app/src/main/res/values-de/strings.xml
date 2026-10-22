@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Senderliste und Einstellungen -->
+    <string name="hint_channels">▲▼ Auswahl   ◀▶ Liste   OK Abspielen   ☰ Einstellungen</string>
+    <string name="settings_title">Einstellungen</string>
+    <string name="settings_fritz">FRITZ!Box-Adresse</string>
+    <string name="btn_test">Verbindung testen</string>
+    <string name="btn_save">Speichern</string>
+    <string name="btn_cancel">Abbrechen</string>
+    <string name="btn_tutorial">Anleitung</string>
+
+    <!-- Ladeanzeige -->
+    <string name="load_list">Lade Senderliste …</string>
+    <string name="load_preparing">Sender wird vorbereitet</string>
+    <string name="load_connecting">Verbindung zur FRITZ!Box wird aufgebaut</string>
+    <string name="load_request">Stream wird bei der FRITZ!Box angefordert</string>
+    <string name="load_tuner">Tuner reserviert, warte auf Daten</string>
+    <string name="load_found">Sender gefunden, Daten kommen an</string>
+    <string name="load_tracks">Sender erkannt, Puffer wird gefüllt</string>
+    <string name="load_first_frame">Erstes Bild empfangen</string>
+    <string name="load_starting">Wiedergabe startet</string>
+    <string name="load_rebuffer">Lade nach …</string>
+    <string name="load_stalled">Datenstrom stockt, Puffer wird aufgefüllt</string>
+    <string name="load_quiet">Seit %1$d s keine Daten, Neustart nach %2$d s</string>
+
+    <!-- Fehler -->
+    <string name="play_failed">Wiedergabe fehlgeschlagen</string>
+    <string name="play_failed_hint">Die App konnte den Sender nicht von der FRITZ!Box abspielen.%1$s\nMöglich: alle Tuner der FRITZ!Box belegt oder die Adresse stimmt nicht.\n▲ ▼ anderer Sender, Menütaste ☰: Einstellungen</string>
+    <string name="list_empty">Senderliste ist leer</string>
+    <string name="list_unavailable">Liste nicht verfügbar</string>
+    <string name="start_failed">Senderliste konnte nicht geladen werden:\n%1$s\nBitte Adresse der FRITZ!Box prüfen.</string>
+    <string name="error_prefix">Fehler: %1$s</string>
+    <string name="err_timeout">Zeitüberschreitung</string>
+    <string name="err_no_data">Keine Daten von der FRITZ!Box (RTP über UDP blockiert?)</string>
+    <string name="err_rtsp_closed">RTSP-Verbindung geschlossen</string>
+    <string name="err_describe_closed">RTSP DESCRIBE: Verbindung geschlossen</string>
+    <string name="err_tuner_busy">RTSP %1$s: Status %2$s (Tuner belegt?)</string>
+    <string name="err_rtsp_status">RTSP %1$s: Status %2$s</string>
+
+    <!-- Infoleiste und Programm -->
+    <string name="tuners">Tuner %1$d/%2$d belegt · %3$d frei</string>
+    <string name="epg_failed">Programm konnte nicht geladen werden.</string>
+    <string name="epg_empty">Noch keine Programminfos. Die App liest den EPG nach dem Start aus dem Kabelsignal ein, das dauert ein paar Minuten.</string>
+
+    <!-- Verbindungstest -->
+    <string name="test_running">Teste …</string>
+    <string name="test_fritz_ok">FRITZ!Box: OK (%1$d HD-Sender)</string>
+    <string name="test_fritz_fail">FRITZ!Box: nicht erreichbar (%1$s)</string>
+    <string name="test_tuners">Tuner: %1$d von %2$d belegt</string>
+    <string name="test_tuners_fail">Tuner: keine Angabe (%1$s)</string>
+
+    <!-- Anleitung -->
+    <string name="tut_step">Anleitung %1$d / %2$d</string>
+    <string name="tut_next">Weiter</string>
+    <string name="tut_done">Fertig</string>
+    <string name="tut_hint">◀▶ Blättern    OK %1$s    Zurück Überspringen</string>
+    <string name="tut1_title">Willkommen bei KabelBox TV</string>
+    <string name="tut1_r1">Live-Fernsehen und Radio direkt von der FRITZ!Box – alles mit der normalen Fernbedienung.</string>
+    <string name="tut1_r2">Die nächsten Seiten zeigen kurz, welche Taste was macht. Das Bild läuft im Hintergrund schon los.</string>
+    <string name="tut1_r3">blättern, OK geht weiter, Zurück überspringt die Anleitung</string>
+    <string name="tut2_title">Sender wechseln</string>
+    <string name="tut2_r1">nächster bzw. vorheriger Sender</string>
+    <string name="tut2_r2">zwischen den Listen HD, SD und Radio wechseln</string>
+    <string name="tut2_r3">nur bei Fernbedienungen mit Zifferntasten: Sendernummer direkt eingeben</string>
+    <string name="tut3_title">Senderliste mit Programm</string>
+    <string name="tut3_r1">Senderliste öffnen, rechts steht das Programm des gewählten Senders</string>
+    <string name="tut3_r2">in der Liste: HD, SD oder Radio</string>
+    <string name="tut3_r3">Sender auswählen, mit ⏪ ⏩ in Zehnerschritten</string>
+    <string name="tut3_r4">ausgewählten Sender abspielen, Zurück schließt die Liste</string>
+    <string name="tut4_title">Infoleiste</string>
+    <string name="tut4_r1">zeigt Sender, was gerade läuft und was danach kommt</string>
+    <string name="tut4_r2">aus welcher Senderliste der Sender stammt</string>
+    <string name="tut4_key3">Tuner</string>
+    <string name="tut4_r3">wie viele Tuner der FRITZ!Box belegt bzw. frei sind (zählt auch andere Geräte mit)</string>
+    <string name="tut5_title">Einstellungen</string>
+    <string name="tut5_key1">☰ Menü</string>
+    <string name="tut5_r1">Einstellungen öffnen: Adresse der FRITZ!Box</string>
+    <string name="tut5_r2">prüft, ob die FRITZ!Box erreichbar ist und wie viele Tuner frei sind</string>
+    <string name="tut5_r3">diese Anleitung jederzeit erneut anzeigen</string>
+    <string name="tut5_key4">Zurück</string>
+    <string name="tut5_r4">im Fernsehbild beendet die App</string>
+</resources>

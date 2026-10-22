@@ -17,6 +17,10 @@ Die Fire-TV-Fernbedienung hat keine Farb- und Zifferntasten. Deshalb liegen dere
 
 Fernbedienungen mit Zifferntasten, Farbtasten oder P+/P− funktionieren wie unter webOS.
 
+## Sprache
+
+Die App richtet sich nach der Systemsprache des Fire TV: Deutsch bei deutscher Systemsprache, sonst Englisch. Die Texte stehen in `app/src/main/res/values/strings.xml` (Englisch) und `values-de/strings.xml` (Deutsch).
+
 ## Wiedergabe und Programmführer
 
 Die App spielt die Sender direkt von der FRITZ!Box ab, ein Proxy oder anderes Gerät ist nicht nötig. Die FRITZ!Box schickt MPEG-TS per RTP (Payload-Typ 33). Das kann der RTSP-Player von Media3 nicht. Deshalb holt `RtspSession` den Stream selbst (wie der webOS-Stream-Dienst), entfernt die RTP-Header und gibt das MPEG-TS über `RtspTsDataSource` an ExoPlayer weiter. Die Senderlisten kommen ebenfalls direkt von der FRITZ!Box (`/dvb/m3u/…`), die Tuner-Anzeige per RTSP-DESCRIBE.

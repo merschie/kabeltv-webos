@@ -1,4 +1,85 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Englisch ist der Rückfall für alle Systemsprachen außer Deutsch (values-de) -->
 <resources>
-    <string name="app_name">KabelBox TV</string>
+    <string name="app_name" translatable="false">KabelBox TV</string>
+
+    <!-- Senderliste und Einstellungen -->
+    <string name="hint_channels">▲▼ Select   ◀▶ List   OK Play   ☰ Settings</string>
+    <string name="settings_title">Settings</string>
+    <string name="settings_fritz">FRITZ!Box address</string>
+    <string name="btn_test">Test connection</string>
+    <string name="btn_save">Save</string>
+    <string name="btn_cancel">Cancel</string>
+    <string name="btn_tutorial">Guide</string>
+
+    <!-- Ladeanzeige -->
+    <string name="load_list">Loading channel list …</string>
+    <string name="load_preparing">Preparing channel</string>
+    <string name="load_connecting">Connecting to the FRITZ!Box</string>
+    <string name="load_request">Requesting stream from the FRITZ!Box</string>
+    <string name="load_tuner">Tuner reserved, waiting for data</string>
+    <string name="load_found">Channel found, data arriving</string>
+    <string name="load_tracks">Channel detected, filling buffer</string>
+    <string name="load_first_frame">First picture received</string>
+    <string name="load_starting">Starting playback</string>
+    <string name="load_rebuffer">Buffering …</string>
+    <string name="load_stalled">Stream stalled, refilling buffer</string>
+    <string name="load_quiet">No data for %1$d s, restarting after %2$d s</string>
+
+    <!-- Fehler -->
+    <string name="play_failed">Playback failed</string>
+    <string name="play_failed_hint">The app could not play this channel from the FRITZ!Box.%1$s\nPossibly all FRITZ!Box tuners are busy or the address is wrong.\n▲ ▼ other channel, menu button ☰: Settings</string>
+    <string name="list_empty">Channel list is empty</string>
+    <string name="list_unavailable">List not available</string>
+    <string name="start_failed">Could not load the channel list:\n%1$s\nPlease check the FRITZ!Box address.</string>
+    <string name="error_prefix">Error: %1$s</string>
+    <string name="err_timeout">Timeout</string>
+    <string name="err_no_data">No data from the FRITZ!Box (RTP over UDP blocked?)</string>
+    <string name="err_rtsp_closed">RTSP connection closed</string>
+    <string name="err_describe_closed">RTSP DESCRIBE: connection closed</string>
+    <string name="err_tuner_busy">RTSP %1$s: status %2$s (tuner busy?)</string>
+    <string name="err_rtsp_status">RTSP %1$s: status %2$s</string>
+
+    <!-- Infoleiste und Programm -->
+    <string name="tuners">Tuners %1$d/%2$d in use · %3$d free</string>
+    <string name="epg_failed">Programme guide could not be loaded.</string>
+    <string name="epg_empty">No programme info yet. After starting, the app reads the EPG from the cable signal; this takes a few minutes.</string>
+
+    <!-- Verbindungstest -->
+    <string name="test_running">Testing …</string>
+    <string name="test_fritz_ok">FRITZ!Box: OK (%1$d HD channels)</string>
+    <string name="test_fritz_fail">FRITZ!Box: not reachable (%1$s)</string>
+    <string name="test_tuners">Tuners: %1$d of %2$d in use</string>
+    <string name="test_tuners_fail">Tuners: no information (%1$s)</string>
+
+    <!-- Anleitung -->
+    <string name="tut_step">Guide %1$d / %2$d</string>
+    <string name="tut_next">Next</string>
+    <string name="tut_done">Done</string>
+    <string name="tut_hint">◀▶ Browse    OK %1$s    Back Skip</string>
+    <string name="tut1_title">Welcome to KabelBox TV</string>
+    <string name="tut1_r1">Live TV and radio straight from your FRITZ!Box – all with the normal remote control.</string>
+    <string name="tut1_r2">The next pages briefly show what each button does. The picture is already starting in the background.</string>
+    <string name="tut1_r3">browse, OK continues, Back skips the guide</string>
+    <string name="tut2_title">Changing channels</string>
+    <string name="tut2_r1">next or previous channel</string>
+    <string name="tut2_r2">switch between the HD, SD and radio lists</string>
+    <string name="tut2_r3">only on remotes with number keys: enter a channel number directly</string>
+    <string name="tut3_title">Channel list with guide</string>
+    <string name="tut3_r1">open the channel list, the selected channel’s programme is shown on the right</string>
+    <string name="tut3_r2">in the list: HD, SD or radio</string>
+    <string name="tut3_r3">select a channel, ⏪ ⏩ jump ten at a time</string>
+    <string name="tut3_r4">play the selected channel, Back closes the list</string>
+    <string name="tut4_title">Info bar</string>
+    <string name="tut4_r1">shows the channel, what is on now and what comes next</string>
+    <string name="tut4_r2">which channel list the channel comes from</string>
+    <string name="tut4_key3">Tuners</string>
+    <string name="tut4_r3">how many FRITZ!Box tuners are in use or free (other devices included)</string>
+    <string name="tut5_title">Settings</string>
+    <string name="tut5_key1">☰ Menu</string>
+    <string name="tut5_r1">open settings: FRITZ!Box address</string>
+    <string name="tut5_r2">checks whether the FRITZ!Box is reachable and how many tuners are free</string>
+    <string name="tut5_r3">show this guide again at any time</string>
+    <string name="tut5_key4">Back</string>
+    <string name="tut5_r4">on the TV picture exits the app</string>
 </resources>

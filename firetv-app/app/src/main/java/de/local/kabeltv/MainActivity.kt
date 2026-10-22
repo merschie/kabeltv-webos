@@ -141,7 +141,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tutDots: LinearLayout
     private lateinit var tutHint: TextView
 
-    private val clockFormat = SimpleDateFormat("HH:mm", Locale.GERMANY)
+    private val clockFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
     private fun fmtTime(ms: Long) = clockFormat.format(Date(ms))
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
     private fun color(id: Int) = ContextCompat.getColor(this, id)
@@ -277,11 +277,11 @@ class MainActivity : AppCompatActivity() {
         override fun onTunerBusy(): Boolean = localEpg.cancelScan()
 
         override fun onConnected(url: String) {
-            handler.post { if (loaderPhase == Phase.STARTING) setLoaderBar(30, "Tuner reserviert, warte auf Daten") }
+            handler.post { if (loaderPhase == Phase.STARTING) setLoaderBar(30, getString(R.string.load_tuner)) }
         }
 
         override fun onFirstData(url: String) {
-            handler.post { if (loaderPhase == Phase.STARTING) setLoaderBar(40, "Sender gefunden, Daten kommen an") }
+            handler.post { if (loaderPhase == Phase.STARTING) setLoaderBar(40, getString(R.string.load_found)) }
         }
 
         // nebenbei die SI-Daten im Stream für den Programmführer mitlesen
@@ -328,7 +328,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun fetchList(id: String): List<Channel> {
         val list = Net.parseM3u(Net.fetchText("http://${fritzHost()}/dvb/m3u/$id.m3u"))
-        if (list.isEmpty()) throw IllegalStateException("Senderliste ist leer")
+        if (list.isEmpty()) throw IllegalStateException(getString(R.string.list_empty))
         return list
     }
 
@@ -363,21 +363,21 @@ class MainActivity : AppCompatActivity() {
             if (loaderPhase == Phase.STARTING && playingAt == 0L) {
                 playingAt = System.currentTimeMillis()
                 startPos = player?.currentPosition ?: 0
-                setLoaderBar(75, "Wiedergabe startet")
+                setLoaderBar(75, getString(R.string.load_starting))
             }
             finishAttempt(true)
         }
 
         override fun onTracksChanged(tracks: Tracks) {
-            if (!tracks.isEmpty && loaderPhase == Phase.STARTING) setLoaderBar(50, "Sender erkannt, Puffer wird gefüllt")
+            if (!tracks.isEmpty && loaderPhase == Phase.STARTING) setLoaderBar(50, getString(R.string.load_tracks))
         }
 
         override fun onRenderedFirstFrame() {
-            if (loaderPhase == Phase.STARTING) setLoaderBar(65, "Erstes Bild empfangen")
+            if (loaderPhase == Phase.STARTING) setLoaderBar(65, getString(R.string.load_first_frame))
         }
 
         override fun onPlayerError(e: PlaybackException) {
-            lastError = (e.cause?.message ?: e.errorCodeName)
+            lastError = e.cause?.message?.let(::localizeError) ?: e.errorCodeName
             val a = attempt
             if (a != null && !a.done) {
                 finishAttempt(false)
@@ -415,11 +415,11 @@ class MainActivity : AppCompatActivity() {
         setRadio(if (id == "radio") ch.name else null)
         loadEpg(id)
         showInfo()
-        startLoader(ch.name, "Sender wird vorbereitet", ch.name)
+        startLoader(ch.name, getString(R.string.load_preparing), ch.name)
         if (player == null) return
 
         lastError = null
-        startLoader(ch.name, "Verbindung zur FRITZ!Box wird aufgebaut", ch.name)
+        startLoader(ch.name, getString(R.string.load_connecting), ch.name)
         startingPlayback = true
 
         val a = Attempt(token)
@@ -431,13 +431,13 @@ class MainActivity : AppCompatActivity() {
                     showInfo()
                 } else {
                     hideStatus()
-                    showError("Wiedergabe fehlgeschlagen", failureHint())
+                    showError(getString(R.string.play_failed), failureHint())
                 }
             }
         }
         handler.postDelayed({
             if (attempt === a && !a.done) {
-                lastError = "Zeitüberschreitung"
+                lastError = getString(R.string.err_timeout)
                 finishAttempt(false)
             }
         }, DIRECT_TIMEOUT)
@@ -447,7 +447,7 @@ class MainActivity : AppCompatActivity() {
         p.setMediaSource(directSource.createMediaSource(MediaItem.fromUri(ch.url)))
         p.prepare()
         p.playWhenReady = true
-        setLoaderBar(15, "Stream wird bei der FRITZ!Box angefordert")
+        setLoaderBar(15, getString(R.string.load_request))
     }
 
     private var onAttemptDone: ((Boolean) -> Unit)? = null
@@ -464,9 +464,24 @@ class MainActivity : AppCompatActivity() {
 
     private fun failureHint(): String {
         val detail = lastError?.let { "\n($it)" } ?: ""
-        return "Die App konnte den Sender nicht von der FRITZ!Box abspielen.$detail\n" +
-            "Möglich: alle Tuner der FRITZ!Box belegt oder die Adresse stimmt nicht.\n" +
-            "▲ ▼ anderer Sender, Menütaste ☰: Einstellungen"
+        return getString(R.string.play_failed_hint, detail)
+    }
+
+    // Fehlertexte aus dem RTSP-Client (Dvb.kt, RtspSession.kt, RtspTsDataSource.kt) sind deutsch,
+    // hier in die Sprache der App
+    private fun localizeError(msg: String): String {
+        Regex("""^RTSP (\w+): Status (\d+) \(Tuner belegt\?\)$""").find(msg)?.let {
+            return getString(R.string.err_tuner_busy, it.groupValues[1], it.groupValues[2])
+        }
+        Regex("""^RTSP (\w+): Status (\d+)$""").find(msg)?.let {
+            return getString(R.string.err_rtsp_status, it.groupValues[1], it.groupValues[2])
+        }
+        return when (msg) {
+            "Keine Daten von der FRITZ!Box (RTP über UDP blockiert?)" -> getString(R.string.err_no_data)
+            "RTSP-Verbindung geschlossen" -> getString(R.string.err_rtsp_closed)
+            "RTSP DESCRIBE: Verbindung geschlossen" -> getString(R.string.err_describe_closed)
+            else -> msg
+        }
     }
 
     private fun zap(delta: Int) {
@@ -478,7 +493,7 @@ class MainActivity : AppCompatActivity() {
         val next = LISTS[(idx + delta).mod(LISTS.size)].id
         loadList(next) { r ->
             r.onSuccess { play(next, prefs.getInt("last.$next", 0)) }
-                .onFailure { showError("Liste nicht verfügbar", it.message ?: "") }
+                .onFailure { showError(getString(R.string.list_unavailable), it.message ?: "") }
         }
     }
 
@@ -506,7 +521,7 @@ class MainActivity : AppCompatActivity() {
                 show(infoTuners, false)
                 return@background
             }
-            infoTuners.text = "Tuner ${t.used}/${t.total} belegt · ${t.free} frei"
+            infoTuners.text = getString(R.string.tuners, t.used, t.total, t.free)
             badge(infoTuners, color(if (t.free == 0) R.color.bad else if (t.free == 1) R.color.warn else R.color.ok))
             show(infoTuners, true)
         }
@@ -601,8 +616,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun showBuffering() {
         loaderPhase = Phase.BUFFERING
-        statusText.text = "Lade nach …"
-        setLoaderStep("Datenstrom stockt, Puffer wird aufgefüllt")
+        statusText.text = getString(R.string.load_rebuffer)
+        setLoaderStep(getString(R.string.load_stalled))
         status.background = null
         show(statusBg, false)
         statusBar.isIndeterminate = true
@@ -645,7 +660,7 @@ class MainActivity : AppCompatActivity() {
                     val quiet = (now - lastMove) / 1000
                     if (moved) loaderRunning()
                     else if (now - lastMove > RECONNECT_MS && channels[listId] != null) play(listId, index)
-                    else if (quiet >= 5) setLoaderStep("Seit $quiet s keine Daten, Neustart nach ${RECONNECT_MS / 1000} s")
+                    else if (quiet >= 5) setLoaderStep(getString(R.string.load_quiet, quiet.toInt(), (RECONNECT_MS / 1000).toInt()))
                 }
                 Phase.IDLE -> Unit
             }
@@ -823,7 +838,7 @@ class MainActivity : AppCompatActivity() {
                 epgDetail[ch.url] = EpgDetail(events, if (events.isNotEmpty()) now else now - EPG_MAX_AGE + 20000)
                 if (visible) renderDetail(events)
             }.onFailure {
-                if (visible) renderDetail(null, "Programm konnte nicht geladen werden.")
+                if (visible) renderDetail(null, getString(R.string.epg_failed))
             }
         }
     }
@@ -836,8 +851,7 @@ class MainActivity : AppCompatActivity() {
             epgEvents.addView(TextView(this).apply {
                 textSize = 14f
                 setTextColor(Color.parseColor("#777777"))
-                text = message
-                    ?: "Noch keine Programminfos. Die App liest den EPG nach dem Start aus dem Kabelsignal ein, das dauert ein paar Minuten."
+                text = message ?: getString(R.string.epg_empty)
             })
             return
         }
@@ -898,7 +912,7 @@ class MainActivity : AppCompatActivity() {
                 renderChannels()
                 loadEpg(id)
             }.onFailure {
-                epgChannel.text = "Fehler: ${it.message}"
+                epgChannel.text = getString(R.string.error_prefix, it.message)
                 epgEvents.removeAllViews()
             }
         }
@@ -958,17 +972,17 @@ class MainActivity : AppCompatActivity() {
 
     private fun testConnection() {
         val d = readDraft()
-        setSettingsStatus("Teste …")
+        setSettingsStatus(getString(R.string.test_running))
         settingsStatus.setTextColor(Color.parseColor("#CCCCCC"))
         background({
             val lines = mutableListOf<String>()
             var bad = false
             runCatching { Net.parseM3u(Net.fetchText("http://${d.fritzHost}/dvb/m3u/tvhd.m3u", 5000)).size }
-                .onSuccess { lines += "FRITZ!Box: OK ($it HD-Sender)" }
-                .onFailure { lines += "FRITZ!Box: nicht erreichbar (${it.message})"; bad = true }
+                .onSuccess { lines += getString(R.string.test_fritz_ok, it) }
+                .onFailure { lines += getString(R.string.test_fritz_fail, it.message); bad = true }
             runCatching { Dvb.describeTuners(d.fritzHost) }
-                .onSuccess { lines += "Tuner: ${it.used} von ${it.total} belegt" }
-                .onFailure { lines += "Tuner: keine Angabe (${it.message})" }
+                .onSuccess { lines += getString(R.string.test_tuners, it.used, it.total) }
+                .onFailure { lines += getString(R.string.test_tuners_fail, it.message?.let(::localizeError)) }
             lines.joinToString("\n") to bad
         }) { r ->
             r.onSuccess { (text, bad) -> if (screen == Screen.SETTINGS) setSettingsStatus(text, bad) }
@@ -994,35 +1008,37 @@ class MainActivity : AppCompatActivity() {
 
     private class TutPage(val title: String, val rows: List<Pair<String, String>>)
 
-    private val tutorial = listOf(
-        TutPage("Willkommen bei KabelBox TV", listOf(
-            "" to "Live-Fernsehen und Radio direkt von der FRITZ!Box – alles mit der normalen Fernbedienung.",
-            "" to "Die nächsten Seiten zeigen kurz, welche Taste was macht. Das Bild läuft im Hintergrund schon los.",
-            "◀ ▶" to "blättern, OK geht weiter, Zurück überspringt die Anleitung"
-        )),
-        TutPage("Sender wechseln", listOf(
-            "▲ ▼" to "nächster bzw. vorheriger Sender",
-            "⏪ ⏩" to "zwischen den Listen HD, SD und Radio wechseln",
-            "0 – 9" to "nur bei Fernbedienungen mit Zifferntasten: Sendernummer direkt eingeben"
-        )),
-        TutPage("Senderliste mit Programm", listOf(
-            "OK / ◀ ▶" to "Senderliste öffnen, rechts steht das Programm des gewählten Senders",
-            "◀ ▶" to "in der Liste: HD, SD oder Radio",
-            "▲ ▼ / ⏪ ⏩" to "Sender auswählen, mit ⏪ ⏩ in Zehnerschritten",
-            "OK" to "ausgewählten Sender abspielen, Zurück schließt die Liste"
-        )),
-        TutPage("Infoleiste", listOf(
-            "⏯" to "zeigt Sender, was gerade läuft und was danach kommt",
-            "HD / SD / Radio" to "aus welcher Senderliste der Sender stammt",
-            "Tuner" to "wie viele Tuner der FRITZ!Box belegt bzw. frei sind (zählt auch andere Geräte mit)"
-        )),
-        TutPage("Einstellungen", listOf(
-            "☰ Menü" to "Einstellungen öffnen: Adresse der FRITZ!Box",
-            "Verbindung testen" to "prüft, ob die FRITZ!Box erreichbar ist und wie viele Tuner frei sind",
-            "Anleitung" to "diese Anleitung jederzeit erneut anzeigen",
-            "Zurück" to "im Fernsehbild beendet die App"
-        ))
-    )
+    private val tutorial by lazy {
+        listOf(
+            TutPage(getString(R.string.tut1_title), listOf(
+                "" to getString(R.string.tut1_r1),
+                "" to getString(R.string.tut1_r2),
+                "◀ ▶" to getString(R.string.tut1_r3)
+            )),
+            TutPage(getString(R.string.tut2_title), listOf(
+                "▲ ▼" to getString(R.string.tut2_r1),
+                "⏪ ⏩" to getString(R.string.tut2_r2),
+                "0 – 9" to getString(R.string.tut2_r3)
+            )),
+            TutPage(getString(R.string.tut3_title), listOf(
+                "OK / ◀ ▶" to getString(R.string.tut3_r1),
+                "◀ ▶" to getString(R.string.tut3_r2),
+                "▲ ▼ / ⏪ ⏩" to getString(R.string.tut3_r3),
+                "OK" to getString(R.string.tut3_r4)
+            )),
+            TutPage(getString(R.string.tut4_title), listOf(
+                "⏯" to getString(R.string.tut4_r1),
+                "HD / SD / Radio" to getString(R.string.tut4_r2),
+                getString(R.string.tut4_key3) to getString(R.string.tut4_r3)
+            )),
+            TutPage(getString(R.string.tut5_title), listOf(
+                getString(R.string.tut5_key1) to getString(R.string.tut5_r1),
+                getString(R.string.btn_test) to getString(R.string.tut5_r2),
+                getString(R.string.btn_tutorial) to getString(R.string.tut5_r3),
+                getString(R.string.tut5_key4) to getString(R.string.tut5_r4)
+            ))
+        )
+    }
 
     private var tutorialOpen = false
     private var tutorialPage = 0
@@ -1044,7 +1060,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun renderTutorial() {
         val p = tutorial[tutorialPage]
-        tutStep.text = "Anleitung ${tutorialPage + 1} / ${tutorial.size}"
+        tutStep.text = getString(R.string.tut_step, tutorialPage + 1, tutorial.size)
         tutTitle.text = p.title
         tutBody.removeAllViews()
         for ((key, text) in p.rows) {
@@ -1081,8 +1097,8 @@ class MainActivity : AppCompatActivity() {
                 }
             }, LinearLayout.LayoutParams(dp(7), dp(7)).apply { leftMargin = dp(4); rightMargin = dp(4) })
         }
-        val ok = if (tutorialPage < tutorial.size - 1) "Weiter" else "Fertig"
-        tutHint.text = "◀▶ Blättern    OK $ok    Zurück Überspringen"
+        val ok = getString(if (tutorialPage < tutorial.size - 1) R.string.tut_next else R.string.tut_done)
+        tutHint.text = getString(R.string.tut_hint, ok)
     }
 
     private fun tutorialKey(code: Int): Boolean {
@@ -1156,17 +1172,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun start() {
         val id = listId
-        showStatus("Lade Senderliste …")
+        showStatus(getString(R.string.load_list))
         loadList(id) { r ->
             r.onSuccess {
                 index = prefs.getInt("last.$id", 0)
                 play(id, index)
             }.onFailure {
                 hideStatus()
-                openSettings(
-                    "Senderliste konnte nicht geladen werden:\n${it.message}\nBitte Adresse der FRITZ!Box prüfen.",
-                    true
-                )
+                openSettings(getString(R.string.start_failed, it.message), true)
             }
         }
     }
