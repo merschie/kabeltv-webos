@@ -1,3 +1,5 @@
 dist/
 node_modules/
 .claude/
+
+docs/store/lg/*.ppt
