@@ -339,8 +339,10 @@ function parseEit(s) {
 
 // ---------- Scan einer Frequenz ----------
 
+// Ohne avm=1: Damit behandelt die FRITZ!Box eine zweite Sitzung desselben Geräts als Senderwechsel und
+// schickt dem laufenden Sender keine Daten mehr (Standbild). Ohne den Parameter laufen beide parallel.
 function siUrl(channelUrl) {
-  return channelUrl.replace(/pids=[^&]*/, `pids=${SI_PIDS}`);
+  return channelUrl.replace(/pids=[^&]*/, `pids=${SI_PIDS}`).replace(/([?&])avm=1(&|$)/, (m, a, b) => (b ? a : ''));
 }
 
 // Sammelt PAT, SDT und EIT aus den TS-Paketen einer Frequenz. Andere PIDs (Bild, Ton) werden übergangen,
