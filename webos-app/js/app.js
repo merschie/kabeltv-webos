@@ -673,14 +673,22 @@
       li.appendChild(col);
       li.addEventListener('click', function () {
         state.overlayIndex = i;
-        closeChannels();
-        play(state.overlayListId, i);
+        pickFromList(state.overlayListId, i);
       });
       li.addEventListener('mouseenter', function () { state.overlayIndex = i; updateSelection(); });
       ul.appendChild(li);
     });
     refreshNowLines();
     updateSelection();
+  }
+
+  // Laufenden Sender erneut gewählt: nur Liste schließen, Stream läuft weiter.
+  // Ohne Quelle oder bei Fehleranzeige wird neu getunt.
+  function pickFromList(listId, index) {
+    closeChannels();
+    if (listId === state.listId && index === state.index && video.hasAttribute('src') &&
+        $('error').classList.contains('hidden')) return;
+    play(listId, index);
   }
 
   function refreshNowLines() {
@@ -796,10 +804,7 @@
       case KEY.LEFT: switchOverlayList(LISTS[(idx + LISTS.length - 1) % LISTS.length].id); break;
       case KEY.RIGHT: switchOverlayList(LISTS[(idx + 1) % LISTS.length].id); break;
       case KEY.OK:
-        if (list.length) {
-          closeChannels();
-          play(state.overlayListId, state.overlayIndex);
-        }
+        if (list.length) pickFromList(state.overlayListId, state.overlayIndex);
         break;
       case KEY.RED: closeChannels(); openSettings(); break;
       case KEY.BACK: case KEY.ESC: case KEY.BACKSPACE: closeChannels(); break;
