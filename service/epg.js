@@ -203,21 +203,55 @@ class SectionReader {
 
 // ---------- DVB-Texte und Zeiten ----------
 
+// ISO 6937 ist der DVB-Standardzeichensatz: Akzente stehen als eigenes Byte vor dem Buchstaben.
+// Die fertigen Buchstaben stehen als Tabelle hier, damit nichts von normalize()/ICU im Node des Fernsehers
+// abhängt: Lose Kombi-Akzente zeigt der TV-Browser nicht sauber an.
 const DIACRITICS = {
-  0xc1: '̀', 0xc2: '́', 0xc3: '̂', 0xc4: '̃', 0xc5: '̄', 0xc6: '̆',
-  0xc7: '̇', 0xc8: '̈', 0xca: '̊', 0xcb: '̧', 0xcd: '̋', 0xce: '̨', 0xcf: '̌'
+  0xc1: ['AEINOUaeinou', 'ÀÈÌǸÒÙàèìǹòù'],
+  0xc2: ['ACEGILNORSUYZacegilnorsuyz', 'ÁĆÉǴÍĹŃÓŔŚÚÝŹáćéǵíĺńóŕśúýź'],
+  0xc3: ['ACEGHIJOSUWYaceghijosuwy', 'ÂĈÊĜĤÎĴÔŜÛŴŶâĉêĝĥîĵôŝûŵŷ'],
+  0xc4: ['AINOUainou', 'ÃĨÑÕŨãĩñõũ'],
+  0xc5: ['AEIOUYaeiouy', 'ĀĒĪŌŪȲāēīōūȳ'],
+  0xc6: ['AEGIOUaegiou', 'ĂĔĞĬŎŬăĕğĭŏŭ'],
+  0xc7: ['ACEGIOZacegoz', 'ȦĊĖĠİȮŻȧċėġȯż'],
+  0xc8: ['AEIOUYaeiouy', 'ÄËÏÖÜŸäëïöüÿ'],
+  0xca: ['AUau', 'ÅŮåů'],
+  0xcb: ['CEGKLNRSTcegklnrst', 'ÇȨĢĶĻŅŖŞŢçȩģķļņŗşţ'],
+  0xcd: ['OUou', 'ŐŰőű'],
+  0xce: ['AEIOUaeiou', 'ĄĘĮǪŲąęįǫų'],
+  0xcf: ['ACDEGHIKLNORSTUZacdeghijklnorstuz', 'ǍČĎĚǦȞǏǨĽŇǑŘŠŤǓŽǎčďěǧȟǐǰǩľňǒřšťǔž']
+};
+DIACRITICS[0xc9] = DIACRITICS[0xc8]; // ältere Sender (T.61) setzen das Trema auf 0xC9
+
+// Übrige Zeichen ab 0xA0, die sich von Latin-1 unterscheiden ('' = nicht belegt)
+const ISO6937 = {
+  0xa4: '$', 0xa6: '#', 0xa8: '¤', 0xa9: '‘', 0xaa: '“', 0xac: '←', 0xad: '↑', 0xae: '→', 0xaf: '↓',
+  0xb4: '×', 0xb8: '÷', 0xb9: '’', 0xba: '”', 0xc0: '', 0xcc: '',
+  0xd0: '―', 0xd1: '¹', 0xd2: '®', 0xd3: '©', 0xd4: '™', 0xd5: '♪', 0xd6: '¬', 0xd7: '¦',
+  0xd8: '', 0xd9: '', 0xda: '', 0xdb: '', 0xdc: '⅛', 0xdd: '⅜', 0xde: '⅝', 0xdf: '⅞',
+  0xe0: 'Ω', 0xe1: 'Æ', 0xe2: 'Đ', 0xe3: 'ª', 0xe4: 'Ħ', 0xe5: '', 0xe6: 'Ĳ', 0xe7: 'Ŀ',
+  0xe8: 'Ł', 0xe9: 'Ø', 0xea: 'Œ', 0xeb: 'º', 0xec: 'Þ', 0xed: 'Ŧ', 0xee: 'Ŋ', 0xef: 'ŉ',
+  0xf0: 'ĸ', 0xf1: 'æ', 0xf2: 'đ', 0xf3: 'ð', 0xf4: 'ħ', 0xf5: 'ı', 0xf6: 'ĳ', 0xf7: 'ŀ',
+  0xf8: 'ł', 0xf9: 'ø', 0xfa: 'œ', 0xfb: 'ß', 0xfc: 'þ', 0xfd: 'ŧ', 0xfe: 'ŋ', 0xff: ''
 };
 
-// ISO 6937 ist der DVB-Standardzeichensatz: Akzente stehen als eigenes Byte vor dem Buchstaben.
+// Abweichungen von Latin-1 in den Zeichensätzen, die deutsche Kabelsender benutzen. Ein Node mit
+// small-icu kennt im TextDecoder nur UTF-8 und Latin-1, deshalb ohne ihn.
+const LATIN_VARIANTS = {
+  'iso-8859-9': { 0xd0: 'Ğ', 0xdd: 'İ', 0xde: 'Ş', 0xf0: 'ğ', 0xfd: 'ı', 0xfe: 'ş' },
+  'iso-8859-15': { 0xa4: '€', 0xa6: 'Š', 0xa8: 'š', 0xb4: 'Ž', 0xb8: 'ž', 0xbc: 'Œ', 0xbd: 'œ', 0xbe: 'Ÿ' }
+};
+
 function decode6937(b) {
   let s = '';
   for (let i = 0; i < b.length; i++) {
     const c = b[i];
-    if (DIACRITICS[c] && i + 1 < b.length) {
-      const ch = String.fromCharCode(b[++i]) + DIACRITICS[c];
-      try { s += ch.normalize('NFC'); } catch { s += ch; } // ohne ICU zeigt der Browser das Kombizeichen auch richtig
-    } else if (c === 0xfb) {
-      s += 'ß';
+    const d = DIACRITICS[c];
+    if (d) {
+      const k = i + 1 < b.length ? d[0].indexOf(String.fromCharCode(b[i + 1])) : -1;
+      if (k >= 0) { s += d[1][k]; i++; }
+    } else if (c >= 0xa0 && ISO6937[c] !== undefined) {
+      s += ISO6937[c];
     } else {
       s += String.fromCharCode(c);
     }
@@ -225,16 +259,63 @@ function decode6937(b) {
   return s;
 }
 
+function decodeLatin(b, enc) {
+  const map = LATIN_VARIANTS[enc] || {};
+  let s = '';
+  for (const c of b) s += map[c] || String.fromCharCode(c);
+  return s;
+}
+
+// Gültiges UTF-8 mit mindestens einem Mehrbyte-Zeichen?
+function looksUtf8(b) {
+  let multi = false;
+  for (let i = 0; i < b.length; i++) {
+    const c = b[i];
+    if (c < 0x80) continue;
+    const n = c >= 0xc2 && c <= 0xdf ? 1 : c >= 0xe0 && c <= 0xef ? 2 : c >= 0xf0 && c <= 0xf4 ? 3 : -1;
+    if (n < 0 || i + n >= b.length) return false;
+    for (let j = 1; j <= n; j++) if ((b[i + j] & 0xc0) !== 0x80) return false;
+    i += n;
+    multi = true;
+  }
+  return multi;
+}
+
+// Passt der Text zu ISO 6937? Latin-1-Umlaute (ä ö ü ß Ä Ö Ü) sind dort Sonderzeichen, die in deutschen
+// Texten nie vorkommen, und ein Akzentbyte muss vor einem passenden Buchstaben stehen.
+function looks6937(b) {
+  for (let i = 0; i < b.length; i++) {
+    const c = b[i];
+    if (c === 0xe4 || c === 0xf6 || c === 0xfc || c === 0xdf || c === 0xd6 || c === 0xdc) return false;
+    const d = DIACRITICS[c];
+    if (d && (i + 1 >= b.length || d[0].indexOf(String.fromCharCode(b[i + 1])) < 0)) return false;
+  }
+  return true;
+}
+
+// Länge des Zeichensatz-Kennbytes am Textanfang (0 = keins)
+function selectorLength(b) {
+  if (!b.length || b[0] >= 0x20) return 0;
+  if (b[0] === 0x10) return 3;
+  if (b[0] === 0x1f) return 2;
+  return 1;
+}
+
 function dvbText(buf) {
   if (!buf || !buf.length) return '';
   let b = buf;
-  let enc = 'iso6937';
+  let enc = null;
   const c = b[0];
-  if (c < 0x20) {
-    if (c >= 0x01 && c <= 0x0b) { enc = `iso-8859-${c + 4}`; b = b.subarray(1); }
-    else if (c === 0x10 && b.length >= 3) { enc = `iso-8859-${b[2]}`; b = b.subarray(3); }
-    else if (c === 0x15) { enc = 'utf-8'; b = b.subarray(1); }
-    else { enc = 'latin1'; b = b.subarray(1); }
+  const sel = selectorLength(b);
+  if (sel) {
+    if (c >= 0x01 && c <= 0x0b) enc = `iso-8859-${c + 4}`;
+    else if (c === 0x10 && b.length >= 3) enc = `iso-8859-${b[2]}`;
+    else if (c === 0x15) enc = 'utf-8';
+    else enc = 'latin1';
+    b = b.subarray(sel);
+  } else {
+    // Ohne Kennbyte gilt eigentlich ISO 6937, manche Sender schicken aber UTF-8 oder Latin-1.
+    enc = looksUtf8(b) ? 'utf-8' : looks6937(b) ? 'iso6937' : 'iso-8859-15';
   }
   // Bei Einbyte-Zeichensätzen sind 0x80–0x9F DVB-Steuerzeichen (0x8A = Zeilenumbruch), keine Buchstaben.
   if (enc !== 'utf-8') {
@@ -242,14 +323,30 @@ function dvbText(buf) {
   }
   let s;
   if (enc === 'iso6937') s = decode6937(b);
+  else if (enc === 'utf-8') s = b.toString('utf8');
+  else if (enc === 'latin1' || LATIN_VARIANTS[enc]) s = decodeLatin(b, enc);
   else {
-    try { s = new TextDecoder(enc).decode(b); } catch { s = b.toString('latin1'); }
+    try { s = new TextDecoder(enc).decode(b); } catch { s = decodeLatin(b, enc); }
   }
   return s
-    .replace(/[\u0080-\u0085\u0086\u0087\u0088-\u0089\u008b-\u009f]/g, '')
+    .replace(/[\u0080-\u0089\u008b-\u009f]/g, '')
     .replace(/\u008a/g, '\n')
     .replace(/[\u0000-\u0009\u000b-\u001f]/g, '')
     .trim();
+}
+
+// Der lange Text einer Sendung ist auf mehrere Deskriptoren verteilt. Meist trägt nur der erste das
+// Zeichensatz-Kennbyte, und Mehrbyte-Zeichen (UTF-8, ISO-6937-Akzente) reißen an der Grenze auseinander.
+// Deshalb erst die Bytes zusammensetzen und dann einmal dekodieren.
+function joinDvbText(parts) {
+  if (!parts.length) return '';
+  const first = parts[0].subarray(0, selectorLength(parts[0]));
+  const rest = parts.map((p, i) => {
+    if (i === 0) return p;
+    const n = selectorLength(p);
+    return n && first.length === n && first.equals(p.subarray(0, n)) ? p.subarray(n) : p;
+  });
+  return dvbText(Buffer.concat(rest));
 }
 
 const bcd = (b) => (b >> 4) * 10 + (b & 0x0f);
@@ -323,12 +420,12 @@ function parseEit(s) {
         text = dvbText(body.subarray(5 + nl, 5 + nl + tl));
       } else if (tag === 0x4e && body.length >= 6) {
         const q = 5 + body[4];
-        ext.push([body[0] >> 4, dvbText(body.subarray(q + 1, q + 1 + body[q]))]);
+        ext.push([body[0] >> 4, body.subarray(q + 1, q + 1 + body[q])]);
       }
       d += 2 + s[d + 1];
     }
     if (ext.length) {
-      const extText = ext.sort((a, b) => a[0] - b[0]).map((e) => e[1]).join('');
+      const extText = joinDvbText(ext.sort((a, b) => a[0] - b[0]).map((e) => e[1]));
       if (extText.length > text.length) text = extText;
     }
     if (start !== null && title) events.push({ id, start, end: start + dur, title, text });
@@ -410,6 +507,8 @@ function parseM3U(text) {
   }
   return out;
 }
+
+const CACHE_VERSION = 2;
 
 const normalize = (s) => s.toLowerCase().replace(/[^a-z0-9äöüß]/g, '');
 
@@ -584,6 +683,7 @@ class Epg {
     if (!this.cacheFile) return;
     try {
       const c = JSON.parse(require('fs').readFileSync(this.cacheFile, 'utf8'));
+      if (c.version !== CACHE_VERSION) return; // ältere Stände mit falsch dekodierten Umlauten verwerfen
       for (const [key, list] of c.events) this.addEvents(key, list);
       this.channelKey = new Map(c.channelKey);
       this.scannedAt = new Map(c.scannedAt);
@@ -595,6 +695,7 @@ class Epg {
 
   cacheData() {
     return JSON.stringify({
+      version: CACHE_VERSION,
       updated: this.updated,
       channelKey: [...this.channelKey],
       scannedAt: [...this.scannedAt],
@@ -625,7 +726,7 @@ class Epg {
   }
 }
 
-module.exports = { Epg, scanMux, parseEit, dvbText, openStream, describeTuners, parseM3U };
+module.exports = { Epg, scanMux, parseEit, dvbText, joinDvbText, openStream, describeTuners, parseM3U };
 
 // Test von der Kommandozeile: node epg.js <rtsp-url> [sekunden]
 if (require.main === module) {

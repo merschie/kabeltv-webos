@@ -52,14 +52,19 @@ function decodeB64url(s) {
 
 // ---------- Programmführer ----------
 
+// Senderlisten kommen als UTF-8; falls nicht (ungültige Bytes), als Latin-1 lesen statt Ersatzzeichen
+function decodeText(buf) {
+  const s = buf.toString('utf8');
+  return s.includes('\ufffd') ? buf.toString('latin1') : s;
+}
+
 function fetchText(url, timeout) {
   return new Promise((resolve, reject) => {
     const req = http.get(url, (res) => {
       if (res.statusCode !== 200) { res.resume(); reject(new Error(`HTTP ${res.statusCode}`)); return; }
-      let body = '';
-      res.setEncoding('utf8');
-      res.on('data', (d) => { body += d; });
-      res.on('end', () => resolve(body));
+      const chunks = [];
+      res.on('data', (d) => chunks.push(d));
+      res.on('end', () => resolve(decodeText(Buffer.concat(chunks))));
     });
     req.setTimeout(timeout, () => req.destroy(new Error('Zeitüberschreitung')));
     req.on('error', reject);

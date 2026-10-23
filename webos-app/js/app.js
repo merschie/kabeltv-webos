@@ -58,14 +58,22 @@
 
   // ---------- Hilfsfunktionen ----------
 
+  // UTF-8, sonst Windows-1252 (r.text() würde ungültige Bytes zu Ersatzzeichen machen)
+  function decodeText(buf) {
+    if (typeof TextDecoder === 'undefined') return String.fromCharCode.apply(null, new Uint8Array(buf));
+    try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch (e) { /* kein UTF-8 */ }
+    return new TextDecoder('windows-1252').decode(buf);
+  }
+
   function fetchText(url, timeout) {
     var ctrl = new AbortController();
     var timer = setTimeout(function () { ctrl.abort(); }, timeout || 6000);
     return fetch(url, { signal: ctrl.signal, cache: 'no-store' })
       .then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.text();
+        return r.arrayBuffer();
       })
+      .then(decodeText)
       .finally(function () { clearTimeout(timer); });
   }
 
