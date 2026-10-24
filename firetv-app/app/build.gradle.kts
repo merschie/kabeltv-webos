@@ -12,8 +12,8 @@ android {
         // Fire OS 5 (Fire TV Stick 1./2. Gen.) entspricht API 22
         minSdk = 22
         targetSdk = 36
-        versionCode = 9
-        versionName = "0.6.1"
+        versionCode = 10
+        versionName = "0.6.2"
 
         // Adresse im Heimnetz, lässt sich in den Einstellungen ändern
         buildConfigField("String", "FRITZ_HOST", "\"192.168.177.1\"")

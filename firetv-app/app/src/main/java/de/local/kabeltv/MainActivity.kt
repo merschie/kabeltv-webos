@@ -238,8 +238,7 @@ class MainActivity : AppCompatActivity() {
         channelList.adapter = channelAdapter
         channelList.setOnItemClickListener { _, _, position, _ ->
             overlayIndex = position
-            closeChannels()
-            play(overlayListId, position)
+            pickFromList(overlayListId, position)
         }
         btnTest.setOnClickListener { testConnection() }
         findViewById<Button>(R.id.btn_save).setOnClickListener { saveSettings() }
@@ -762,6 +761,16 @@ class MainActivity : AppCompatActivity() {
         loadEpg(overlayListId)
     }
 
+    // Laufenden Sender erneut gewählt: nur Liste schließen, Stream läuft weiter.
+    // Ohne laufenden Player (auch nach einem Abbruch) oder bei Fehleranzeige wird neu getunt.
+    private fun pickFromList(id: String, i: Int) {
+        closeChannels()
+        val p = player
+        val active = p != null && p.mediaItemCount > 0 && p.playbackState != Player.STATE_IDLE
+        if (id == listId && i == index && error.visibility != View.VISIBLE && active) return
+        play(id, i)
+    }
+
     private fun closeChannels() {
         screen = Screen.TV
         show(channelsPanel, false)
@@ -933,10 +942,7 @@ class MainActivity : AppCompatActivity() {
             KeyEvent.KEYCODE_DPAD_LEFT -> switchOverlayList(LISTS[(idx + LISTS.size - 1) % LISTS.size].id)
             KeyEvent.KEYCODE_DPAD_RIGHT -> switchOverlayList(LISTS[(idx + 1) % LISTS.size].id)
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
-                if (size > 0) {
-                    closeChannels()
-                    play(overlayListId, overlayIndex)
-                }
+                if (size > 0) pickFromList(overlayListId, overlayIndex)
             }
             KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_PROG_RED, KeyEvent.KEYCODE_SETTINGS -> { closeChannels(); openSettings() }
             KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE, KeyEvent.KEYCODE_GUIDE -> closeChannels()
