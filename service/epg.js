@@ -223,6 +223,12 @@ const DIACRITICS = {
 };
 DIACRITICS[0xc9] = DIACRITICS[0xc8]; // ältere Sender (T.61) setzen das Trema auf 0xC9
 
+// Akzent vor einem Leerzeichen oder am Ende steht für sich (z. B. „Mats´ Versuche“)
+const SPACING = {
+  0xc1: '`', 0xc2: '´', 0xc3: '^', 0xc4: '~', 0xc5: '¯', 0xc6: '˘', 0xc7: '˙', 0xc8: '¨', 0xc9: '¨',
+  0xca: '˚', 0xcb: '¸', 0xcd: '˝', 0xce: '˛', 0xcf: 'ˇ'
+};
+
 // Übrige Zeichen ab 0xA0, die sich von Latin-1 unterscheiden ('' = nicht belegt)
 const ISO6937 = {
   0xa4: '$', 0xa6: '#', 0xa8: '¤', 0xa9: '‘', 0xaa: '“', 0xac: '←', 0xad: '↑', 0xae: '→', 0xaf: '↓',
@@ -250,6 +256,7 @@ function decode6937(b) {
     if (d) {
       const k = i + 1 < b.length ? d[0].indexOf(String.fromCharCode(b[i + 1])) : -1;
       if (k >= 0) { s += d[1][k]; i++; }
+      else if (i + 1 >= b.length || b[i + 1] === 0x20) s += SPACING[c];
     } else if (c >= 0xa0 && ISO6937[c] !== undefined) {
       s += ISO6937[c];
     } else {
@@ -288,7 +295,7 @@ function looks6937(b) {
     const c = b[i];
     if (c === 0xe4 || c === 0xf6 || c === 0xfc || c === 0xdf || c === 0xd6 || c === 0xdc) return false;
     const d = DIACRITICS[c];
-    if (d && (i + 1 >= b.length || d[0].indexOf(String.fromCharCode(b[i + 1])) < 0)) return false;
+    if (d && i + 1 < b.length && b[i + 1] !== 0x20 && d[0].indexOf(String.fromCharCode(b[i + 1])) < 0) return false;
   }
   return true;
 }
